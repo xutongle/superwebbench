@@ -41,6 +41,8 @@
 #define HTTP_09 0
 #define HTTP_10 1
 #define HTTP_11 2
+#define OUTPUT_TEXT 0
+#define OUTPUT_JSON 1
 
 #define BUF_SIZE 1024
 #define URL_SIZE 1500
@@ -53,6 +55,7 @@
 #define DEFAULT_FORCE 0
 #define DEFAULT_PORT 80
 #define DEFAULT_METHOD METHOD_GET
+#define DEFAULT_OUTPUT OUTPUT_TEXT
 
 #define DEFAULT_FORE_RELOAD 0
 #define DEFAULT_STACK_SIZE 32768
@@ -67,6 +70,7 @@ struct parameter {
   int port;
   int clients;
   int bench_time;
+  int output;
   char *host;
   char *request;
 };
@@ -91,14 +95,25 @@ static char const *const gs_http_method[] = {
     "OPTIONS",
     "TRACE",
 };
+static char const *const gs_http_version[] = {
+    "HTTP/0.9",
+    "HTTP/1.0",
+    "HTTP/1.1",
+};
 
 /* prototypes */
 static void *bench_thread(void *para);
-static int bench(struct parameter *para);
+static int bench(struct parameter *para, const char *url);
 static void build_request(const char *url, struct parameter *para);
 static int http_response_check(const char *response);
 static int parse_opt(int argc, char *argv[], struct parameter *para);
 static int resource_set(int clients);
+static void json_string(const char *value);
+static void print_result(const struct parameter *para, const char *url,
+                         unsigned long long speed,
+                         unsigned long long failed,
+                         unsigned long long httperr,
+                         unsigned long long bytes);
 
 static int resource_set(int clients) {
   struct rlimit lim;
@@ -150,6 +165,8 @@ static void usage(void) {
       "  -p|--proxy <server:port>        Use proxy server for request.\n"
       "  -c|--clients <n>                Run <n> HTTP clients at once. Default "
       "one.\n"
+      "  -o|--output <text|json>         Select result output format. Default "
+      "text.\n"
       "  -9|--http09                     Use HTTP/0.9 style requests.\n"
       "  -1|--http10                     Use HTTP/1.0 protocol.\n"
       "  -2|--http11                     Use HTTP/1.1 protocol.\n"
@@ -176,6 +193,7 @@ static int parse_opt(int argc, char *argv[], struct parameter *para) {
       {"time", required_argument, NULL, 't'},
       {"proxy", required_argument, NULL, 'p'},
       {"clients", required_argument, NULL, 'c'},
+      {"output", required_argument, NULL, 'o'},
       {NULL, 0, NULL, 0}};
 
   int opt = 0;
@@ -187,7 +205,7 @@ static int parse_opt(int argc, char *argv[], struct parameter *para) {
     return 0;
   }
 
-  while ((opt = getopt_long(argc, argv, "912Vfrt:p:c:?h", long_options,
+  while ((opt = getopt_long(argc, argv, "912Vfrt:p:c:o:?h", long_options,
                             &options_index)) != EOF) {
     switch (opt) {
     case 0:
@@ -263,6 +281,17 @@ static int parse_opt(int argc, char *argv[], struct parameter *para) {
         return -1;
       }
       break;
+    case 'o':
+      if (strcmp(optarg, "text") == 0) {
+        para->output = OUTPUT_TEXT;
+      } else if (strcmp(optarg, "json") == 0) {
+        para->output = OUTPUT_JSON;
+      } else {
+        fprintf(stderr, "Error in option --output %s: expected text or json.\n",
+                optarg);
+        return -1;
+      }
+      break;
     }
   }
 
@@ -282,18 +311,20 @@ int main(int argc, char *argv[]) {
   struct parameter para = {
       DEFAULT_FORCE,    DEFAULT_FORE_RELOAD, DEFAULT_PROXY,
       DEFAULT_HTTP_VER, DEFAULT_METHOD,      DEFAULT_PORT,
-      DEFAULT_CLIENT,   DEFAULT_TIME,        host,
-      request,
+      DEFAULT_CLIENT,   DEFAULT_TIME,        DEFAULT_OUTPUT,
+      host,             request,
   };
   // parse options
   if ((ret = parse_opt(argc, argv, &para)) <= 0)
     return ret < 0 ? 2 : 0;
 
   build_request(argv[argc - 1], &para);
-  /* Copyright */
-  printf("\nSuperWebBench - Advanced Simple Web Benchmark " PROGRAM_VERSION "\n"
-         "Copyright (c) Radim Kolar 1997-2004, GPL Open Source Software.\n"
-         "Modified By Davelv 2011-11-03\n");
+  if (para.output == OUTPUT_TEXT) {
+    /* Copyright */
+    printf("\nSuperWebBench - Advanced Simple Web Benchmark " PROGRAM_VERSION "\n"
+           "Copyright (c) Radim Kolar 1997-2004, GPL Open Source Software.\n"
+           "Modified By Davelv 2011-11-03\n");
+  }
   // check resourse limits
   if ((ret = resource_set(para.clients)) < 0) {
     fprintf(stderr,
@@ -304,17 +335,9 @@ int main(int argc, char *argv[]) {
     return 4;
   }
   /* print bench info */
-  printf("\nBenchmarking:%s %s", gs_http_method[para.method], argv[argc - 1]);
-  switch (para.http_ver) {
-  case 0:
-    puts(" (using HTTP/0.9)");
-    break;
-  case 1:
-    puts(" (using HTTP/1.0)");
-    break;
-  case 2:
-    puts(" (using HTTP/1.1)");
-    break;
+  if (para.output == OUTPUT_TEXT) {
+    printf("\nBenchmarking:%s %s (using %s)\n", gs_http_method[para.method],
+           argv[argc - 1], gs_http_version[para.http_ver]);
   }
   /* check avaibility of target server */
   ret = Socket(para.host, para.port);
@@ -323,7 +346,7 @@ int main(int argc, char *argv[]) {
     return 1;
   }
   close(ret);
-  return bench(&para);
+  return bench(&para, argv[argc - 1]);
 }
 
 void build_request(const char *url, struct parameter *para) {
@@ -459,7 +482,7 @@ void build_request(const char *url, struct parameter *para) {
 }
 
 /* vraci system rc error kod */
-static int bench(struct parameter *para) {
+static int bench(struct parameter *para, const char *url) {
   int i;
   unsigned long long speed = 0;
   unsigned long long failed = 0;
@@ -487,21 +510,23 @@ static int bench(struct parameter *para) {
     free(args);
     return 3;
   }
-  printf("\n%d clients, running %d sec", para->clients, para->bench_time);
-  if (para->force)
-    printf(", early socket close");
-  if (para->proxy)
-    printf(", via proxy server %s:%d", para->host, para->port);
-  if (para->force_reload)
-    printf(", forcing reload");
-  printf(".\n");
+  if (para->output == OUTPUT_TEXT) {
+    printf("\n%d clients, running %d sec", para->clients, para->bench_time);
+    if (para->force)
+      printf(", early socket close");
+    if (para->proxy)
+      printf(", via proxy server %s:%d", para->host, para->port);
+    if (para->force_reload)
+      printf(", forcing reload");
+    printf(".\n");
+  }
   // new thread
   atomic_store(&bench_stop, 0);
   for (i = 0; i < para->clients; i++) {
     int ret_p =
         pthread_create(&args[i].thread, &attr, bench_thread, args + i);
     if (ret_p) {
-      printf("pthread create error %d on %d\n", ret_p, i);
+      fprintf(stderr, "pthread create error %d on %d\n", ret_p, i);
       /* 创建失败的槽位保持 started=0，计数为零，不影响其他客户端 */
     } else {
       args[i].started = 1;
@@ -524,11 +549,85 @@ static int bench(struct parameter *para) {
     bytes += args[i].bytes;
   }
   free(args);
-  printf("\nSpeed=%llu requests/sec (total), %llu pages/sec (success), %llu bytes/sec.\nRequests: %llu ok, %llu "
-         "http error, %llu failed.\n",
-         (speed + httperr + failed) / para->bench_time,
-         speed / para->bench_time, bytes / para->bench_time, speed, httperr, failed);
+  print_result(para, url, speed, failed, httperr, bytes);
   return 0;
+}
+
+/* 输出 JSON 字符串，转义引号、反斜杠和控制字符，保证输出可解析 */
+static void json_string(const char *value) {
+  const unsigned char *p = (const unsigned char *)value;
+
+  putchar('"');
+  while (*p != '\0') {
+    switch (*p) {
+    case '"':
+      fputs("\\\"", stdout);
+      break;
+    case '\\':
+      fputs("\\\\", stdout);
+      break;
+    case '\b':
+      fputs("\\b", stdout);
+      break;
+    case '\f':
+      fputs("\\f", stdout);
+      break;
+    case '\n':
+      fputs("\\n", stdout);
+      break;
+    case '\r':
+      fputs("\\r", stdout);
+      break;
+    case '\t':
+      fputs("\\t", stdout);
+      break;
+    default:
+      if (*p < 0x20)
+        printf("\\u%04x", *p);
+      else
+        putchar(*p);
+      break;
+    }
+    p++;
+  }
+  putchar('"');
+}
+
+static void print_result(const struct parameter *para, const char *url,
+                         unsigned long long speed,
+                         unsigned long long failed,
+                         unsigned long long httperr,
+                         unsigned long long bytes) {
+  unsigned long long total = speed + failed + httperr;
+
+  if (para->output == OUTPUT_JSON) {
+    printf("{\"version\":");
+    json_string(PROGRAM_VERSION);
+    printf(",\"url\":");
+    json_string(url);
+    printf(",\"host\":");
+    json_string(para->host);
+    printf(",\"port\":%d,\"method\":", para->port);
+    json_string(gs_http_method[para->method]);
+    printf(",\"http_version\":");
+    json_string(gs_http_version[para->http_ver]);
+    printf(",\"clients\":%d,\"duration_seconds\":%d,\"force\":%s,"
+           "\"proxy\":%s,\"reload\":%s,\"total_requests\":%llu,"
+           "\"successful_requests\":%llu,\"http_errors\":%llu,"
+           "\"failed_requests\":%llu,\"bytes_received\":%llu,"
+           "\"requests_per_second\":%llu,\"successful_requests_per_second\":%llu,"
+           "\"bytes_per_second\":%llu}\n",
+           para->clients, para->bench_time, para->force ? "true" : "false",
+           para->proxy ? "true" : "false",
+           para->force_reload ? "true" : "false", total, speed, httperr,
+           failed, bytes, total / para->bench_time,
+           speed / para->bench_time, bytes / para->bench_time);
+  } else {
+    printf("\nSpeed=%llu requests/sec (total), %llu pages/sec (success), %llu "
+           "bytes/sec.\nRequests: %llu ok, %llu http error, %llu failed.\n",
+           total / para->bench_time, speed / para->bench_time,
+           bytes / para->bench_time, speed, httperr, failed);
+  }
 }
 
 #define ERR_PROCESS(a, b, c)                                                   \

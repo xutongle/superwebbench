@@ -18,6 +18,7 @@ SuperWebBench 是一个轻量级命令行 HTTP 基准测试工具，由 Webbench
 - 提供代理和禁止代理缓存相关选项。
 - 普通模式下检查 HTTP 响应状态，仅将 2xx 响应计为成功。
 - 统计成功请求、HTTP 错误、失败请求、每秒请求数和每秒接收字节数。
+- 支持人类可读的文本输出和便于脚本解析的 JSON 输出。
 
 ## 运行环境
 
@@ -124,6 +125,18 @@ man superwebbench
 
 `--force` 模式会产生更高的请求压力，其成功计数只表示请求发送和连接关闭流程完成，不代表服务器返回了 HTTP 2xx 响应。
 
+以 JSON 格式输出结果，便于脚本或 CI 解析：
+
+```bash
+./superwebbench -c 20 -t 10 --output json http://127.0.0.1:8080/
+```
+
+也可以将结果直接保存到文件：
+
+```bash
+./superwebbench -c 20 -t 10 -o json http://127.0.0.1:8080/ > result.json
+```
+
 ## 命令行用法
 
 ```text
@@ -137,6 +150,7 @@ superwebbench [options] URL
 | `-f`, `--force` | 发送请求后不等待响应，直接关闭连接 |
 | `-r`, `--reload` | 使用代理时发送 `Pragma: no-cache` 请求头 |
 | `-p`, `--proxy <server:port>` | 通过指定代理服务器 `server:port` 发送请求 |
+| `-o`, `--output <format>` | 结果格式：`text`（默认）或 `json`；其他值会报错并以状态码 2 退出 |
 | `-9`, `--http09` | 使用 HTTP/0.9 风格请求 |
 | `-1`, `--http10` | 使用 HTTP/1.0 |
 | `-2`, `--http11` | 使用 HTTP/1.1，默认值；不支持 Keep-Alive |
@@ -200,6 +214,29 @@ Requests: 6017 ok, 0 http error, 0 failed.
 | `failed` | 连接、写入、读取或关闭 Socket 等操作失败的请求数 |
 
 每个请求都会重新建立 TCP 连接。普通模式读取响应直到服务器关闭连接，HTTP/1.1 请求会携带 `Connection: close`。
+
+### JSON 输出
+
+使用 `-o json` 或 `--output json` 时，标准输出仅包含一个完整的 JSON 对象，不再输出版权和进度文本。错误信息仍写入标准错误，退出状态码规则不变。
+
+```json
+{"version":"0.1","url":"http://127.0.0.1:8080/","host":"127.0.0.1","port":8080,"method":"GET","http_version":"HTTP/1.1","clients":20,"duration_seconds":10,"force":false,"proxy":false,"reload":false,"total_requests":6017,"successful_requests":6017,"http_errors":0,"failed_requests":0,"bytes_received":29723980,"requests_per_second":601,"successful_requests_per_second":601,"bytes_per_second":2972398}
+```
+
+字段对应关系：
+
+| JSON 字段 | 含义 |
+| --- | --- |
+| `total_requests` | 总请求数，等于成功、HTTP 错误和失败请求数之和 |
+| `successful_requests` | 成功请求数 |
+| `http_errors` | HTTP 错误请求数 |
+| `failed_requests` | 失败请求数 |
+| `bytes_received` | 接收的响应总字节数 |
+| `requests_per_second` | 平均每秒总请求数 |
+| `successful_requests_per_second` | 平均每秒成功请求数 |
+| `bytes_per_second` | 平均每秒接收字节数 |
+
+其余字段记录压测配置，包括 URL、主机、端口、方法、HTTP 版本、客户端数、时长及 force/proxy/reload 开关。JSON 字符串会转义引号、反斜杠和控制字符。
 
 ## 退出状态码
 
