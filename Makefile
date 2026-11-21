@@ -10,7 +10,7 @@ OPENSSL_LIBS=	-lssl -lcrypto
 endif
 CPPFLAGS+=	$(OPENSSL_CFLAGS)
 PREFIX?=	/usr
-VERSION=	1.0.0
+VERSION=	1.0.1
 TMPDIR=/tmp/superwebbench-$(VERSION)
 
 all:   superwebbench tags

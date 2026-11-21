@@ -33,7 +33,7 @@
 #include <sys/time.h>
 #include <unistd.h>
 
-#define PROGRAM_VERSION "1.0.0"
+#define PROGRAM_VERSION "1.0.1"
 #define METHOD_GET 0
 #define METHOD_HEAD 1
 #define METHOD_OPTIONS 2
