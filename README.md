@@ -134,13 +134,13 @@ superwebbench [options] URL
 | `-t`, `--time <sec>` | 测试时长，单位为秒，默认为 `30`；小于等于 0 时恢复默认值 |
 | `-f`, `--force` | 发送请求后不等待响应，直接关闭连接 |
 | `-r`, `--reload` | 使用代理时发送 `Pragma: no-cache` 请求头 |
-| `-p`, `--proxy <server:port>` | 通过指定代理发送请求；当前实现存在已知问题，不建议使用 |
+| `-p`, `--proxy <server:port>` | 通过指定代理服务器 `server:port` 发送请求 |
 | `-9`, `--http09` | 使用 HTTP/0.9 风格请求 |
 | `-1`, `--http10` | 使用 HTTP/1.0 |
 | `-2`, `--http11` | 使用 HTTP/1.1，默认值；不支持 Keep-Alive |
 | `--get` | 使用 GET 方法，默认值 |
 | `--head` | 使用 HEAD 方法；HTTP/0.9 下会自动升级到 HTTP/1.0 |
-| `--options` | 使用 OPTIONS 方法选项；HTTP/1.0 及以下会自动升级到 HTTP/1.1，实际请求方法存在已知问题 |
+| `--options` | 使用 OPTIONS 方法；HTTP/1.0 及以下会自动升级到 HTTP/1.1 |
 | `--trace` | 使用 TRACE 方法；HTTP/1.0 及以下会自动升级到 HTTP/1.1 |
 | `-?`, `-h`, `--help` | 显示帮助信息 |
 | `-V`, `--version` | 显示程序版本 |
@@ -180,16 +180,17 @@ http://example.com
 测试开始前，程序会输出目标 URL、请求方法、HTTP 版本、客户端数和测试时长。测试结束后输出汇总结果：
 
 ```text
-Speed=1234 pages/sec, 567890 bytes/sec.
-Requests: 37000 ok, 10 http error, 20 failed.
+Speed=3008 requests/sec (total), 3008 pages/sec (success), 2972398 bytes/sec.
+Requests: 6017 ok, 0 http error, 0 failed.
 ```
 
 以上数值仅为输出格式示例，各字段含义如下：
 
 | 字段 | 含义 |
 | --- | --- |
-| `Speed pages/sec` | 平均每秒处理的请求数，计算时包含成功、HTTP 错误和失败请求 |
-| `Speed bytes/sec` | 平均每秒从服务器接收的响应字节数 |
+| `requests/sec (total)` | 平均每秒总请求数，计算时包含成功、HTTP 错误和失败请求，反映整体吞吐 |
+| `pages/sec (success)` | 平均每秒成功请求数，仅统计 HTTP 2xx 响应 |
+| `bytes/sec` | 平均每秒从服务器接收的响应字节数 |
 | `ok` | 成功请求数；普通模式下仅统计 HTTP 2xx 响应 |
 | `http error` | HTTP 响应未通过 2xx 检查，或未读取到有效响应等异常数量 |
 | `failed` | 连接、写入、读取或关闭 Socket 等操作失败的请求数 |
@@ -243,8 +244,6 @@ make superwebbench
 
 - 不支持直接请求 HTTPS，也不支持 IPv6。
 - HTTP/1.1 不支持 Keep-Alive，每次请求都会重新建立连接。
-- `--proxy` 参数解析后未正确设置后续连接使用的代理主机，代理模式目前不可用。
-- `--options` 当前实际生成的请求方法为 `OPTION`，与标准 HTTP 方法 `OPTIONS` 不一致。
 - 工作线程使用无限循环，没有显式停止标志和线程回收流程，测试结束后依赖进程退出终止线程。
 - `make tar` 当前引用了仓库中不存在的 `debian/rules`，且复制清单遗漏 `socket.h`，不建议直接用于源码打包。
 
