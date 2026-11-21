@@ -9,6 +9,8 @@ SuperWebBench 是一个轻量级命令行 HTTP 基准测试工具，由 Webbench
 ## 功能特性
 
 - 使用 POSIX 线程模拟并发客户端，默认线程栈大小为 32 KiB。
+- 到时后工作线程正常停止，主线程 `pthread_join` 回收并完整汇总计数。
+- 支持 IPv4 与 IPv6 目标，地址解析使用线程安全的 `getaddrinfo`。
 - 支持 GET、HEAD、OPTIONS、TRACE 请求方法选项。
 - 支持 HTTP/0.9、HTTP/1.0 和 HTTP/1.1。
 - 支持自定义并发客户端数和测试时长。
@@ -23,11 +25,11 @@ SuperWebBench 是一个轻量级命令行 HTTP 基准测试工具，由 Webbench
 
 - C 编译器（默认使用 `gcc`）和 Make。
 - POSIX Threads（pthread）。
-- POSIX/BSD Socket、IPv4 DNS 解析和 `getopt_long`。
+- POSIX/BSD Socket、`getaddrinfo`（IPv4/IPv6）和 `getopt_long`。
 - `sys/resource.h` 中的资源限制接口。
-- `rpc/types.h` 等系统头文件。
+- C11 `<stdatomic.h>`（用于工作线程停止标志）。
 
-源码未针对 Windows 进行适配。macOS 或其他 Unix-like 平台可能需要根据系统头文件和资源限制接口进行适配验证。
+源码未针对 Windows 进行适配。已在 macOS（clang）验证可编译运行，其他 Unix-like 平台建议自行 `make` 验证。
 
 `ctags` 仅用于生成源码索引，不是编译和运行的必需依赖。默认 `make` 会尝试执行 `ctags *.c`，未安装时会显示错误，但该错误会被忽略，不影响二进制文件生成。
 
@@ -130,8 +132,8 @@ superwebbench [options] URL
 
 | 选项 | 说明 |
 | --- | --- |
-| `-c`, `--clients <n>` | 并发客户端数，默认为 `1`；小于等于 0 时恢复默认值 |
-| `-t`, `--time <sec>` | 测试时长，单位为秒，默认为 `30`；小于等于 0 时恢复默认值 |
+| `-c`, `--clients <n>` | 并发客户端数，默认为 `1`；非数字、负数或 0 会报错并以状态码 2 退出 |
+| `-t`, `--time <sec>` | 测试时长（秒），默认为 `30`；非数字、负数或 0 会报错并以状态码 2 退出 |
 | `-f`, `--force` | 发送请求后不等待响应，直接关闭连接 |
 | `-r`, `--reload` | 使用代理时发送 `Pragma: no-cache` 请求头 |
 | `-p`, `--proxy <server:port>` | 通过指定代理服务器 `server:port` 发送请求 |
@@ -153,9 +155,9 @@ superwebbench [options] URL
 
 - 仅支持 `http://`，不支持直接请求 `https://`。
 - 主机名后必须包含路径，根路径也需要显式写成 `/`。
-- 支持在主机名后指定端口。
+- 支持在主机名后指定端口，端口须为 1–65535 的数字。
+- 支持 IPv4、主机名（可解析到 AAAA 记录）以及 `[::1]` 形式的 IPv6 字面量。
 - URL 最大长度为 1500 字节。
-- 当前 Socket 实现仅支持 IPv4。
 
 正确示例：
 
@@ -163,6 +165,8 @@ superwebbench [options] URL
 http://example.com/
 http://example.com/index.html
 http://example.com:8080/api?id=1
+http://127.0.0.1:8080/
+http://[::1]:8080/
 ```
 
 以下地址会被判定为无效：
@@ -238,21 +242,19 @@ make superwebbench
 4. 建立一次测试连接，提前确认目标是否可访问。
 5. 为每个客户端创建一个 POSIX 工作线程。
 6. 工作线程循环执行“连接、发送请求、读取响应、关闭连接、更新计数”。
-7. 主线程等待指定时长后汇总各线程计数并输出结果。
+7. 到达指定时长后，主线程置位停止标志，等待各工作线程结束当前请求并退出（`pthread_join`），再汇总计数输出结果。若目标服务器长时间不响应，退出会等待进行中的请求完成。
 
 ## 当前限制与已知问题
 
-- 不支持直接请求 HTTPS，也不支持 IPv6。
+- 不支持直接请求 HTTPS（可通过 `--proxy` 经由代理访问其他协议）。
 - HTTP/1.1 不支持 Keep-Alive，每次请求都会重新建立连接。
-- 工作线程使用无限循环，没有显式停止标志和线程回收流程，测试结束后依赖进程退出终止线程。
-- `make tar` 当前引用了仓库中不存在的 `debian/rules`，且复制清单遗漏 `socket.h`，不建议直接用于源码打包。
 
 ## 项目结构
 
 ```text
 .
 ├── superwebbench.c    # 主程序、参数解析、HTTP 请求构造和压测逻辑
-├── socket.c           # IPv4 地址解析与 TCP 连接
+├── socket.c           # getaddrinfo 地址解析（IPv4/IPv6）与 TCP 连接
 ├── socket.h           # Socket 接口声明
 ├── Makefile           # 编译、安装、清理和打包规则
 ├── superwebbench.1    # man 手册

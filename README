@@ -18,7 +18,7 @@ Copyright: GPL (see /usr/share/common-licenses/GPL)
 
 *************************************************************
 Installation :
-wget https://github.com/xutongle/superwebbench/superwebbench.tar.gz
+wget https://github.com/xutongle/superwebbench/releases/latest/download/superwebbench.tar.gz
 tar zxvf superwebbench.tar.gz
 cd superwebbench
 make && make install
