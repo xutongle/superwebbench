@@ -32,7 +32,7 @@ SuperWebBench 是一个轻量级命令行 HTTP 基准测试工具，由 Webbench
 
 源码未针对 Windows 进行适配。已在 macOS（clang）验证可编译运行，其他 Unix-like 平台建议自行 `make` 验证。
 
-`ctags` 仅用于生成源码索引，不是编译和运行的必需依赖。默认 `make` 会尝试执行 `ctags *.c`，未安装时会显示错误，但该错误会被忽略，不影响二进制文件生成。
+`ctags` 仅用于生成源码索引，不是编译和运行的必需依赖。默认 `make` 会在生成索引前检查 `ctags` 是否可用：已安装时执行 `ctags *.c`，未安装时显示跳过提示并继续，不影响二进制文件编译。
 
 ## 编译与安装
 
@@ -250,9 +250,9 @@ Requests: 6017 ok, 0 http error, 0 failed.
 
 ## 常见问题
 
-### 提示 `ctags: command not found`
+### 未安装 `ctags`
 
-该提示不会影响程序编译。可以安装 ctags，也可以改用：
+默认 `make` 会提示 `ctags not found, skipping tags generation` 并自动跳过源码索引生成，不影响程序编译。需要生成索引时可以安装 ctags，也可以只编译程序：
 
 ```bash
 make superwebbench

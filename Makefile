@@ -9,7 +9,11 @@ TMPDIR=/tmp/superwebbench-$(VERSION)
 all:   superwebbench tags
 
 tags:  *.c
-	-ctags *.c
+	@if command -v ctags >/dev/null 2>&1; then \
+		ctags *.c; \
+	else \
+		echo "ctags not found, skipping tags generation"; \
+	fi
 
 install: superwebbench
 	install -s superwebbench $(DESTDIR)$(PREFIX)/bin	

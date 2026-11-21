@@ -25,8 +25,12 @@ make && make install
 
 *************************************************************
 Question:
-ctags *.c
-/bin/sh: ctags: command not found
-make: [tags] ���� 127 (����)
+ctags is optional and is only used to generate the source index.
+The default make target checks for ctags and skips index generation when it is unavailable.
+To generate the index, install ctags and run:
 
-yum install ctags
+make tags
+
+To build only the executable, run:
+
+make superwebbench

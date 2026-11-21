@@ -1,0 +1,36 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - '*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Create GitHub Release
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build
+        run: make superwebbench
+
+      - name: Package source tarball
+        run: make tar
+
+      - name: Package Linux binary
+        run: |
+          tag="${GITHUB_REF_NAME}"
+          tar -czf "superwebbench-${tag}-linux-x86_64.tar.gz" superwebbench
+
+      - name: Publish Release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          files: |
+            superwebbench-*.tar.gz
