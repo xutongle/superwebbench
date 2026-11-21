@@ -5,7 +5,7 @@
 [![GitHub issues](https://img.shields.io/github/issues/xutongle/superwebbench?style=flat-square)](https://github.com/xutongle/superwebbench/issues)
 [![GitHub license](https://img.shields.io/github/license/xutongle/superwebbench?style=flat-square)](LICENSE)
 
-SuperWebBench 是一个轻量级命令行 HTTP/HTTPS 基准测试工具，由 Webbench 修改而来。它使用 POSIX 线程模拟多个并发客户端，通过反复建立 TCP 连接、发送 HTTP 请求并读取响应，统计请求数量、错误数量和吞吐量。
+基于 Webbench 重构与扩展的命令行压测工具，使用 C11 和 POSIX Threads 模拟多客户端并发请求，支持 HTTP/HTTPS、IPv4/IPv6，能够统计请求成功率、HTTP 错误、失败请求、QPS 及网络吞吐量，用于 Web 服务性能测试与容量评估。
 
 当前版本：**1.0.1**，详细变更见 [Changelog](Changelog)。
 
