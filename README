@@ -1,0 +1,32 @@
+SuperWebbench is modified from webbech which you can see it blow.
+SuperWebbench is is a software that follows the POSIX standard.
+SuperWebbench was written by XuTongle 2012 (85825770@qq.com).
+SuperWebbench is a simple Web benchmarker and faster,
+lower resource requirement than the original version.
+
+Enjoy it & views are welcome.
+
+*************************************************************
+
+COPYRIGHT FROM WEBBENCH:
+Webbench was written by Radim Kolar 1997-2004 (hsn@netmag.cz).
+
+UNIX sockets code (socket.c) taken from popclient 1.5 4/1/94 
+public domain code, created by Virginia Tech Computing Center.
+
+Copyright: GPL (see /usr/share/common-licenses/GPL)
+
+*************************************************************
+Installation :
+wget https://github.com/downloads/xutongle/SuperWebBench/superwebbench.tar.gz
+tar zxvf superwebbench.tar.gz
+cd superwebbench
+make && make install
+
+*************************************************************
+Question:
+ctags *.c
+/bin/sh: ctags: command not found
+make: [tags] ´íÎó 127 (ºöÂÔ)
+
+yum install ctags
