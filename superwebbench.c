@@ -325,9 +325,11 @@ int main(int argc, char *argv[]) {
   build_request(argv[argc - 1], &para);
   if (para.output == OUTPUT_TEXT) {
     /* Copyright */
-    printf("\nSuperWebBench - Advanced Simple Web Benchmark " PROGRAM_VERSION "\n"
+    printf("\nSuperWebBench - Advanced Simple Web Benchmark " PROGRAM_VERSION
+           "\n"
            "Copyright (c) Radim Kolar 1997-2004, GPL Open Source Software.\n"
-           "Modified By Davelv 2011-11-03\n");
+           "Modified By Davelv 2011-11-03\n"
+           "Modified By XuTongle 2012-05-18\n");
   }
   // check resourse limits
   if ((ret = resource_set(para.clients)) < 0) {
