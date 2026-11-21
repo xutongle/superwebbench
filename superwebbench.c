@@ -53,7 +53,9 @@
 #define DEFAULT_CLIENT 1
 #define DEFAULT_TIME 30
 #define DEFAULT_FORCE 0
-#define DEFAULT_PORT 80
+#define DEFAULT_HTTPS 0
+#define DEFAULT_HTTP_PORT 80
+#define DEFAULT_HTTPS_PORT 443
 #define DEFAULT_METHOD METHOD_GET
 #define DEFAULT_OUTPUT OUTPUT_TEXT
 
@@ -65,6 +67,7 @@ struct parameter {
   int force;
   int force_reload;
   int proxy;
+  int https;
   int http_ver;
   int method;
   int port;
@@ -78,6 +81,7 @@ struct thread_arg {
   char *host;
   char *request;
   int force;
+  int https;
   int port;
   int http_ver;
   unsigned long speed;
@@ -310,9 +314,9 @@ int main(int argc, char *argv[]) {
   char request[REQUEST_SIZE];
   struct parameter para = {
       DEFAULT_FORCE,    DEFAULT_FORE_RELOAD, DEFAULT_PROXY,
-      DEFAULT_HTTP_VER, DEFAULT_METHOD,      DEFAULT_PORT,
-      DEFAULT_CLIENT,   DEFAULT_TIME,        DEFAULT_OUTPUT,
-      host,             request,
+      DEFAULT_HTTPS,    DEFAULT_HTTP_VER,    DEFAULT_METHOD,
+      DEFAULT_HTTP_PORT, DEFAULT_CLIENT,     DEFAULT_TIME,
+      DEFAULT_OUTPUT,   host,                request,
   };
   // parse options
   if ((ret = parse_opt(argc, argv, &para)) <= 0)
@@ -340,13 +344,29 @@ int main(int argc, char *argv[]) {
            argv[argc - 1], gs_http_version[para.http_ver]);
   }
   /* check avaibility of target server */
-  ret = Socket(para.host, para.port);
-  if (ret < 0) {
-    fprintf(stderr, "\nConnect to server failed. Aborting benchmark.\n");
-    return 1;
+  if (para.https && Connection_init() < 0) {
+    fprintf(stderr, "\nInitialize TLS failed. Aborting benchmark.\n");
+    Connection_print_errors();
+    Connection_cleanup();
+    return 3;
   }
-  close(ret);
-  return bench(&para, argv[argc - 1]);
+  {
+    Connection connection;
+    if (Connection_open(&connection, para.host, para.port, para.https) < 0) {
+      fprintf(stderr,
+              "\nConnect to server or establish TLS session failed. Aborting "
+              "benchmark.\n");
+      if (para.https)
+        Connection_print_errors();
+      Connection_cleanup();
+      return 1;
+    }
+    Connection_close(&connection);
+  }
+  ret = bench(&para, argv[argc - 1]);
+  if (para.https)
+    Connection_cleanup();
+  return ret;
 }
 
 void build_request(const char *url, struct parameter *para) {
@@ -390,12 +410,19 @@ void build_request(const char *url, struct parameter *para) {
     fprintf(stderr, "URL is too long.\n");
     exit(2);
   }
-  if (!para->proxy)
-    if (0 != strncasecmp("http://", url, 7)) {
-      fprintf(stderr, "\nOnly HTTP protocol is directly supported, set --proxy "
-                      "for others.\n");
+  if (!para->proxy) {
+    if (0 == strncasecmp("http://", url, 7)) {
+      para->https = 0;
+      para->port = DEFAULT_HTTP_PORT;
+    } else if (0 == strncasecmp("https://", url, 8)) {
+      para->https = 1;
+      para->port = DEFAULT_HTTPS_PORT;
+    } else {
+      fprintf(stderr, "\nOnly HTTP and HTTPS protocols are directly supported, "
+                      "set --proxy for others.\n");
       exit(2);
     }
+  }
   /* protocol/host delimiter */
   i = strstr(url, "://") - url + 3;
 
@@ -502,6 +529,7 @@ static int bench(struct parameter *para, const char *url) {
     args[i].request = para->request;
     args[i].http_ver = para->http_ver;
     args[i].force = para->force;
+    args[i].https = para->https;
   }
   // theads
   pthread_attr_init(&attr);
@@ -633,7 +661,7 @@ static void print_result(const struct parameter *para, const char *url,
 #define ERR_PROCESS(a, b, c)                                                   \
   {                                                                            \
     a++;                                                                       \
-    close(b);                                                                  \
+    Connection_close(&(b));                                                    \
     goto c;                                                                    \
   }
 void *bench_thread(void *arg) {
@@ -641,45 +669,47 @@ void *bench_thread(void *arg) {
   struct thread_arg *p_arg = (struct thread_arg *)arg;
   int rlen = strlen(p_arg->request);
   char buf[BUF_SIZE];
-  int s, i, cnt;
+  int i, cnt;
 
   while (1) {
+    Connection connection;
   outloop:
     if (atomic_load(&bench_stop))
       break;
-    s = Socket(p_arg->host, p_arg->port);
-    if (s < 0) {
+    if (Connection_open(&connection, p_arg->host, p_arg->port, p_arg->https) <
+        0) {
       p_arg->failed++;
       continue;
     }
-    if (rlen != write(s, p_arg->request, rlen)) {
-      ERR_PROCESS(p_arg->failed, s, outloop);
+    if (rlen != Connection_write(&connection, p_arg->request, rlen)) {
+      ERR_PROCESS(p_arg->failed, connection, outloop);
     }
-    if (p_arg->http_ver == HTTP_09)
-      if (shutdown(s, 1)) {
-        ERR_PROCESS(p_arg->failed, s, outloop);
+    /* TLS 没有半关闭写方向的操作；HTTP/0.9 请求本身也没有请求体。 */
+    if (!p_arg->https && p_arg->http_ver == HTTP_09)
+      if (shutdown(connection.fd, 1)) {
+        ERR_PROCESS(p_arg->failed, connection, outloop);
       }
     if (p_arg->force == 0) {
       /* read all available data from socket */
       cnt = 0;
       while (1) {
-        i = read(s, buf, BUF_SIZE);
+        i = Connection_read(&connection, buf, BUF_SIZE);
         if (i < 0) {
-          ERR_PROCESS(p_arg->failed, s, outloop);
+          ERR_PROCESS(p_arg->failed, connection, outloop);
         } else if (i == 0) {
           if (cnt == 0) { // first read
-            ERR_PROCESS(p_arg->httperr, s, outloop);
+            ERR_PROCESS(p_arg->httperr, connection, outloop);
           }
           break;
         } else { // check http status
           p_arg->bytes += i;
           if ((cnt++ == 0) && (http_response_check(buf) < 0)) {
-            ERR_PROCESS(p_arg->httperr, s, outloop);
+            ERR_PROCESS(p_arg->httperr, connection, outloop);
           }
         }
       }
     }
-    if (close(s)) {
+    if (Connection_close(&connection)) {
       p_arg->failed++;
       continue;
     }

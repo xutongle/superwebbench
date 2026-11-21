@@ -1,6 +1,6 @@
 # SuperWebBench
 
-SuperWebBench 是一个轻量级命令行 HTTP 基准测试工具，由 Webbench 修改而来。它使用 POSIX 线程模拟多个并发客户端，通过反复建立 TCP 连接、发送 HTTP 请求并读取响应，统计请求数量、错误数量和吞吐量。
+SuperWebBench 是一个轻量级命令行 HTTP/HTTPS 基准测试工具，由 Webbench 修改而来。它使用 POSIX 线程模拟多个并发客户端，通过反复建立 TCP 连接、发送 HTTP 请求并读取响应，统计请求数量、错误数量和吞吐量。
 
 > 请仅对自己拥有或获得明确授权的服务器进行压测。高并发请求可能消耗大量网络、连接和系统资源，并影响目标服务及同机其他业务。
 
@@ -9,6 +9,7 @@ SuperWebBench 是一个轻量级命令行 HTTP 基准测试工具，由 Webbench
 - 使用 POSIX 线程模拟并发客户端，默认线程栈大小为 32 KiB。
 - 到时后工作线程正常停止，主线程 `pthread_join` 回收并完整汇总计数。
 - 支持 IPv4 与 IPv6 目标，地址解析使用线程安全的 `getaddrinfo`。
+- 支持直接测试 HTTPS 地址，使用 OpenSSL 建立 TLS 连接，发送 SNI 并验证证书链及主机名或 IP。
 - 支持 GET、HEAD、OPTIONS、TRACE 请求方法选项。
 - 支持 HTTP/0.9、HTTP/1.0 和 HTTP/1.1。
 - 支持自定义并发客户端数和测试时长。
@@ -25,10 +26,13 @@ SuperWebBench 是一个轻量级命令行 HTTP 基准测试工具，由 Webbench
 - C 编译器（默认使用 `gcc`）和 Make。
 - POSIX Threads（pthread）。
 - POSIX/BSD Socket、`getaddrinfo`（IPv4/IPv6）和 `getopt_long`。
+- OpenSSL 1.1 或更高版本（`libssl` 和 `libcrypto`，用于 HTTPS）。
 - `sys/resource.h` 中的资源限制接口。
 - C11 `<stdatomic.h>`（用于工作线程停止标志）。
 
 源码未针对 Windows 进行适配。已在 macOS（clang）验证可编译运行，其他 Unix-like 平台建议自行 `make` 验证。
+
+Makefile 优先通过 `pkg-config` 获取 OpenSSL 编译和链接参数，未找到时默认使用 `-lssl -lcrypto`。如果 OpenSSL 安装在非标准路径，可以通过 `OPENSSL_CFLAGS` 和 `OPENSSL_LIBS` 显式指定。
 
 `ctags` 仅用于生成源码索引，不是编译和运行的必需依赖。默认 `make` 会在生成索引前检查 `ctags` 是否可用：已安装时执行 `ctags *.c`，未安装时显示跳过提示并继续，不影响二进制文件编译。
 
@@ -115,6 +119,15 @@ man superwebbench
 ./superwebbench -c 20 -t 10 http://127.0.0.1:8080/
 ```
 
+直接测试 HTTPS 地址，未指定端口时默认使用 443：
+
+```bash
+./superwebbench -c 20 -t 10 https://example.com/
+./superwebbench -c 20 -t 10 https://example.com:8443/
+```
+
+HTTPS 默认验证 CA 证书链以及目标主机名或 IP。使用私有 CA 时，可通过 OpenSSL 标准的 `SSL_CERT_FILE` 或 `SSL_CERT_DIR` 环境变量配置信任证书。
+
 发送请求后不读取响应，直接关闭连接：
 
 ```bash
@@ -165,7 +178,7 @@ superwebbench [options] URL
 
 直接请求目标服务器时：
 
-- 仅支持 `http://`，不支持直接请求 `https://`。
+- 支持 `http://` 和 `https://`，默认端口分别为 80 和 443。
 - 主机名后必须包含路径，根路径也需要显式写成 `/`。
 - 支持在主机名后指定端口，端口须为 1–65535 的数字。
 - 支持 IPv4、主机名（可解析到 AAAA 记录）以及 `[::1]` 形式的 IPv6 字面量。
@@ -175,21 +188,24 @@ superwebbench [options] URL
 
 ```text
 http://example.com/
+https://example.com/
+https://example.com:8443/api?id=1
 http://example.com/index.html
 http://example.com:8080/api?id=1
 http://127.0.0.1:8080/
-http://[::1]:8080/
+https://[::1]:8443/
 ```
 
 以下地址会被判定为无效：
 
 ```text
 example.com
-https://example.com/
+ftp://example.com/
 http://example.com
+https://example.com
 ```
 
-其中 `http://example.com` 缺少主机名后的 `/`，应改为 `http://example.com/`。
+其中 `http://example.com` 和 `https://example.com` 缺少主机名后的 `/`，应分别在末尾补上 `/`。
 
 ## 输出说明
 
@@ -211,7 +227,7 @@ Requests: 6017 ok, 0 http error, 0 failed.
 | `http error` | HTTP 响应未通过 2xx 检查，或未读取到有效响应等异常数量 |
 | `failed` | 连接、写入、读取或关闭 Socket 等操作失败的请求数 |
 
-每个请求都会重新建立 TCP 连接。普通模式读取响应直到服务器关闭连接，HTTP/1.1 请求会携带 `Connection: close`。
+每个请求都会重新建立 TCP 连接，HTTPS 请求还会重新完成 TLS 握手。普通模式读取响应直到服务器关闭连接，HTTP/1.1 请求会携带 `Connection: close`。
 
 ### JSON 输出
 
@@ -263,6 +279,7 @@ make superwebbench
 - URL 是否符合上述格式。
 - 目标服务是否已启动，端口是否正确。
 - 本机能否解析目标主机名并建立 TCP 连接。
+- HTTPS 证书是否由受信任的 CA 签发，且证书中的主机名或 IP 与 URL 匹配。
 - 防火墙或网络策略是否阻止连接。
 
 ### 提示 `Set NOFILE/NPROC limit failed`
@@ -274,14 +291,14 @@ make superwebbench
 1. 解析命令行参数、目标主机、端口和请求路径。
 2. 构造 HTTP 请求行及 `User-Agent`、`Host`、`Connection` 等请求头。
 3. 根据并发客户端数检查并调整系统资源限制。
-4. 建立一次测试连接，提前确认目标是否可访问。
+4. 建立一次测试连接，提前确认目标是否可访问；HTTPS 还会完成 TLS 握手和证书校验。
 5. 为每个客户端创建一个 POSIX 工作线程。
-6. 工作线程循环执行“连接、发送请求、读取响应、关闭连接、更新计数”。
+6. 工作线程循环执行“连接、发送请求、读取响应、关闭连接、更新计数”，HTTPS 连接在发送请求前建立 TLS 会话。
 7. 到达指定时长后，主线程置位停止标志，等待各工作线程结束当前请求并退出（`pthread_join`），再汇总计数输出结果。若目标服务器长时间不响应，退出会等待进行中的请求完成。
 
 ## 当前限制与已知问题
 
-- 不支持直接请求 HTTPS（可通过 `--proxy` 经由代理访问其他协议）。
+- `--proxy` 按原方式发送 HTTP 代理请求，不支持通过 `CONNECT` 建立 HTTPS 隧道；直接测试 HTTPS 时不要指定该选项。
 - HTTP/1.1 不支持 Keep-Alive，每次请求都会重新建立连接。
 
 ## 项目结构
@@ -289,8 +306,8 @@ make superwebbench
 ```text
 .
 ├── superwebbench.c    # 主程序、参数解析、HTTP 请求构造和压测逻辑
-├── socket.c           # getaddrinfo 地址解析（IPv4/IPv6）与 TCP 连接
-├── socket.h           # Socket 接口声明
+├── socket.c           # IPv4/IPv6 TCP 连接及 OpenSSL TLS 传输
+├── socket.h           # Socket 与 TLS 连接接口声明
 ├── Makefile           # 编译、安装、清理和打包规则
 ├── superwebbench.1    # man 手册
 ├── README             # 原始项目说明

@@ -3,6 +3,7 @@ superwebbench (1.0.0) unstable; urgency=medium
   * stop and join worker threads on time up, free resources on exit
   * support text and JSON result output with -o/--output
   * support IPv6 with thread-safe getaddrinfo resolver
+  * support direct HTTPS benchmarks with OpenSSL certificate verification
   * strict option and URL validation, bounded request construction
   * fix make tar contents, update man page, add GPL v2 license text
  -- SuperWebBench contributors  On November 21, 2026

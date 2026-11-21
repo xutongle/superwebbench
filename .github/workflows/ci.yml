@@ -18,12 +18,20 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Install dependencies (Linux)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libssl-dev pkg-config
+
       - name: Install dependencies (macOS)
         if: runner.os == 'macOS'
-        run: brew install ctags
+        run: brew install ctags openssl@3 pkg-config
 
       - name: Build
-        run: make
+        run: |
+          if [ "$RUNNER_OS" = "macOS" ]; then
+            export PKG_CONFIG_PATH="$(brew --prefix openssl@3)/lib/pkgconfig${PKG_CONFIG_PATH:+:$PKG_CONFIG_PATH}"
+          fi
+          make
 
       - name: Smoke test
         run: |

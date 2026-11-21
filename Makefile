@@ -2,6 +2,13 @@ CFLAGS?=	-Wall -ggdb -W -O2
 CC?=		gcc
 LIBS?=
 LDFLAGS?=	-lpthread
+PKG_CONFIG?=	pkg-config
+OPENSSL_CFLAGS?=	$(shell $(PKG_CONFIG) --cflags openssl 2>/dev/null)
+OPENSSL_LIBS?=	$(shell $(PKG_CONFIG) --libs openssl 2>/dev/null)
+ifeq ($(strip $(OPENSSL_LIBS)),)
+OPENSSL_LIBS=	-lssl -lcrypto
+endif
+CPPFLAGS+=	$(OPENSSL_CFLAGS)
 PREFIX?=	/usr
 VERSION=	1.0.0
 TMPDIR=/tmp/superwebbench-$(VERSION)
@@ -25,7 +32,7 @@ install: superwebbench
 	install -m 644 LICENSE $(DESTDIR)$(PREFIX)/share/doc/superwebbench
 
 superwebbench: superwebbench.o socket.o
-	$(CC) $(CFLAGS) $(LDFLAGS) -o superwebbench *.o $(LIBS) 
+	$(CC) $(CFLAGS) $(LDFLAGS) -o superwebbench *.o $(LIBS) $(OPENSSL_LIBS)
 
 clean:
 	-rm -f *.o superwebbench *~ core *.core tags
@@ -37,7 +44,7 @@ tar:   clean
 	tar -czf superwebbench-$(VERSION).tar.gz -C /tmp superwebbench-$(VERSION)
 	rm -rf $(TMPDIR)
 
-superwebbench.o:	superwebbench.c
-socket.o:	socket.c
+superwebbench.o:	superwebbench.c socket.h
+socket.o:	socket.c socket.h
 
 .PHONY: clean install all tar
