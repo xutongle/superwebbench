@@ -3,7 +3,7 @@ CC?=		gcc
 LIBS?=
 LDFLAGS?=	-lpthread
 PREFIX?=	/usr
-VERSION=	0.1
+VERSION=	1.0.0
 TMPDIR=/tmp/superwebbench-$(VERSION)
 
 all:   superwebbench tags

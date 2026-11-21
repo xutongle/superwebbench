@@ -1,4 +1,4 @@
-superwebbench (0.1+fixes) unstable; urgency=medium
+superwebbench (1.0.0) unstable; urgency=medium
   * fix proxy host/port parsing and the OPTIONS request method name
   * stop and join worker threads on time up, free resources on exit
   * support text and JSON result output with -o/--output

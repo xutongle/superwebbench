@@ -17,11 +17,11 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Build
-        run: make superwebbench
-
       - name: Package source tarball
         run: make tar
+
+      - name: Build
+        run: make superwebbench
 
       - name: Package Linux binary
         run: |
