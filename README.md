@@ -1,5 +1,10 @@
 # SuperWebBench
 
+[![GitHub stars](https://img.shields.io/github/stars/xutongle/superwebbench?style=flat-square)](https://github.com/xutongle/superwebbench/stargazers)
+[![GitHub forks](https://img.shields.io/github/forks/xutongle/superwebbench?style=flat-square)](https://github.com/xutongle/superwebbench/network/members)
+[![GitHub issues](https://img.shields.io/github/issues/xutongle/superwebbench?style=flat-square)](https://github.com/xutongle/superwebbench/issues)
+[![GitHub license](https://img.shields.io/github/license/xutongle/superwebbench?style=flat-square)](LICENSE)
+
 SuperWebBench 是一个轻量级命令行 HTTP/HTTPS 基准测试工具，由 Webbench 修改而来。它使用 POSIX 线程模拟多个并发客户端，通过反复建立 TCP 连接、发送 HTTP 请求并读取响应，统计请求数量、错误数量和吞吐量。
 
 > 请仅对自己拥有或获得明确授权的服务器进行压测。高并发请求可能消耗大量网络、连接和系统资源，并影响目标服务及同机其他业务。
