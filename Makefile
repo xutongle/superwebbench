@@ -16,6 +16,7 @@ install: superwebbench
 	install -m 644 superwebbench.1 $(DESTDIR)$(PREFIX)/share/man/man1	
 	install -d $(DESTDIR)$(PREFIX)/share/doc/superwebbench
 	install -m 644 README $(DESTDIR)$(PREFIX)/share/doc/superwebbench
+	install -m 644 README.md $(DESTDIR)$(PREFIX)/share/doc/superwebbench
 	install -m 644 Changelog $(DESTDIR)$(PREFIX)/share/doc/superwebbench
 
 superwebbench: superwebbench.o socket.o
@@ -25,13 +26,11 @@ clean:
 	-rm -f *.o superwebbench *~ core *.core tags
 	
 tar:   clean
-	-debian/rules clean
 	rm -rf $(TMPDIR)
 	install -d $(TMPDIR)
-	cp -p Makefile superwebbench.c socket.c superwebbench.1 $(TMPDIR)
-	ln -sf  README $(TMPDIR)/README
-	ln -sf Changelog $(TMPDIR)/ChangeLog
-	-cd $(TMPDIR) && cd .. && tar cozf superwebbench-$(VERSION).tar.gz superwebbench-$(VERSION)
+	cp -p Makefile superwebbench.c socket.c socket.h superwebbench.1 README README.md Changelog $(TMPDIR)
+	tar -czf superwebbench-$(VERSION).tar.gz -C /tmp superwebbench-$(VERSION)
+	rm -rf $(TMPDIR)
 
 superwebbench.o:	superwebbench.c
 socket.o:	socket.c

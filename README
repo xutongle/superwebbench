@@ -18,7 +18,7 @@ Copyright: GPL (see /usr/share/common-licenses/GPL)
 
 *************************************************************
 Installation :
-wget https://github.com/downloads/xutongle/SuperWebBench/superwebbench.tar.gz
+wget https://github.com/xutongle/superwebbench/superwebbench.tar.gz
 tar zxvf superwebbench.tar.gz
 cd superwebbench
 make && make install
@@ -27,6 +27,6 @@ make && make install
 Question:
 ctags *.c
 /bin/sh: ctags: command not found
-make: [tags] ´íÎó 127 (ºöÂÔ)
+make: [tags] ï¿½ï¿½ï¿½ï¿½ 127 (ï¿½ï¿½ï¿½ï¿½)
 
 yum install ctags

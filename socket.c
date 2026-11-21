@@ -12,40 +12,47 @@
   compiler:     DEC RISC C compiler (Ultrix 4.1)
   environment:  DEC Ultrix 4.3
   description:  UNIX sockets code.
+
+  Rewritten with getaddrinfo(): supports IPv4/IPv6 and is thread-safe.
  ***********************************************************************/
 #include "socket.h"
-#include <arpa/inet.h>
 #include <netdb.h>
 #include <stdio.h>
 #include <string.h>
 #include <sys/socket.h>
+#include <sys/types.h>
 #include <unistd.h>
+
 int Socket(const char *host, int clientPort) {
-  int sock;
-  unsigned long inaddr;
-  struct sockaddr_in ad;
-  struct hostent *hp;
+  struct addrinfo hints;
+  struct addrinfo *result = NULL;
+  struct addrinfo *rp;
+  char port[6];
+  int sock = -1;
 
-  memset(&ad, 0, sizeof(ad));
-  ad.sin_family = AF_INET;
-
-  inaddr = inet_addr(host);
-  if (inaddr != INADDR_NONE)
-    memcpy(&ad.sin_addr, &inaddr, sizeof(inaddr));
-  else {
-    hp = gethostbyname(host);
-    if (hp == NULL)
-      return -1;
-    memcpy(&ad.sin_addr, hp->h_addr, hp->h_length);
-  }
-  ad.sin_port = htons(clientPort);
-
-  sock = socket(AF_INET, SOCK_STREAM, 0);
-  if (sock < 0)
-    return sock;
-  if (connect(sock, (struct sockaddr *)&ad, sizeof(ad)) < 0) {
-    close(sock);
+  if (clientPort <= 0 || clientPort > 65535)
     return -1;
+  snprintf(port, sizeof port, "%d", clientPort);
+
+  memset(&hints, 0, sizeof hints);
+  hints.ai_family = AF_UNSPEC; /* IPv4 与 IPv6 均可 */
+  hints.ai_socktype = SOCK_STREAM;
+  hints.ai_protocol = IPPROTO_TCP;
+
+  if (getaddrinfo(host, port, &hints, &result) != 0)
+    return -1;
+
+  /* 依次尝试解析结果，直到某个地址连接成功 */
+  for (rp = result; rp != NULL; rp = rp->ai_next) {
+    sock = socket(rp->ai_family, rp->ai_socktype, rp->ai_protocol);
+    if (sock < 0)
+      continue;
+    if (connect(sock, rp->ai_addr, rp->ai_addrlen) == 0)
+      break;
+    close(sock);
+    sock = -1;
   }
+
+  freeaddrinfo(result);
   return sock;
 }

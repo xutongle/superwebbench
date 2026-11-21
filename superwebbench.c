@@ -4,7 +4,7 @@
  * This is free software, see GNU Public License version 2 for
  * details.
  *
- * Simple forking WWW Server benchmark:
+ * Simple threaded WWW Server benchmark:
  *
  * Usage:
  *   superwebbench --help
@@ -18,10 +18,12 @@
  *
  */
 #include "socket.h"
+#include <errno.h>
 #include <getopt.h>
+#include <limits.h>
 #include <pthread.h>
-#include <rpc/types.h>
 #include <signal.h>
+#include <stdatomic.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -78,7 +80,11 @@ struct thread_arg {
   unsigned long failed;
   unsigned long httperr;
   unsigned long bytes;
+  pthread_t thread;
+  int started;
 };
+/* 压测停止标志：主线程到时置位，工作线程在每轮请求前检查 */
+static _Atomic int bench_stop = 0;
 static char const *const gs_http_method[] = {
     "GET",
     "HEAD",
@@ -116,14 +122,22 @@ static int resource_set(int clients) {
 
   return 0;
 }
-/* NOT USE
-static void
-exit_handler(int signal)
-{
-        if (signal == SIGUSR1)
-                pthread_exit(NULL);
+/* 解析十进制整数；成功返回 0，非法、负数或溢出返回 -1 */
+static int parse_int(const char *str, int *value) {
+  char *end = NULL;
+  long parsed;
+
+  if (str == NULL || *str == '\0')
+    return -1;
+  errno = 0;
+  parsed = strtol(str, &end, 10);
+  if (errno != 0 || end == str || *end != '\0' || parsed < 0 ||
+      parsed > INT_MAX)
+    return -1;
+  *value = (int)parsed;
+  return 0;
 }
-*/
+
 static void usage(void) {
   fprintf(
       stderr,
@@ -197,14 +211,19 @@ static int parse_opt(int argc, char *argv[], struct parameter *para) {
       printf(PROGRAM_VERSION "\n");
       return 0;
     case 't':
-      para->bench_time = atoi(optarg);
+      if (parse_int(optarg, &para->bench_time) != 0 || para->bench_time <= 0) {
+        fprintf(stderr, "Error in option --time %s: invalid seconds.\n", optarg);
+        return -1;
+      }
       break;
     case 'p':
       para->proxy = 1;
       /* proxy server parsing server:port */
       tmp = strrchr(optarg, ':');
       if (tmp == NULL) {
-        break;
+        fprintf(stderr, "Error in option --proxy %s: Port number is missing.\n",
+                optarg);
+        return -1;
       }
       if (tmp == optarg) {
         fprintf(stderr, "Error in option --proxy %s: Missing hostname.\n",
@@ -218,11 +237,15 @@ static int parse_opt(int argc, char *argv[], struct parameter *para) {
       }
       *tmp = '\0';
       /* 保存代理主机名，供后续建立连接使用 */
-      strncpy(para->host, optarg, MAXHOSTNAMELEN - 1);
-      para->host[MAXHOSTNAMELEN - 1] = '\0';
-      para->port = atoi(tmp + 1);
-      if (para->port <= 0) {
-        fprintf(stderr, "Error in option --proxy %s Port number is invaild.\n",
+      if (strlen(optarg) >= MAXHOSTNAMELEN) {
+        fprintf(stderr, "Error in option --proxy %s: hostname too long.\n",
+                optarg);
+        return -1;
+      }
+      strcpy(para->host, optarg);
+      if (parse_int(tmp + 1, &para->port) != 0 || para->port <= 0 ||
+          para->port > 65535) {
+        fprintf(stderr, "Error in option --proxy %s Port number is invalid.\n",
                 optarg);
         return -1;
       }
@@ -234,7 +257,11 @@ static int parse_opt(int argc, char *argv[], struct parameter *para) {
       return 0;
       break;
     case 'c':
-      para->clients = atoi(optarg);
+      if (parse_int(optarg, &para->clients) != 0 || para->clients <= 0) {
+        fprintf(stderr, "Error in option --clients %s: invalid client count.\n",
+                optarg);
+        return -1;
+      }
       break;
     }
   }
@@ -245,10 +272,6 @@ static int parse_opt(int argc, char *argv[], struct parameter *para) {
     return 2;
   }
 
-  if (para->clients <= 0)
-    para->clients = DEFAULT_CLIENT;
-  if (para->bench_time <= 0)
-    para->bench_time = DEFAULT_TIME;
   return 1;
 }
 
@@ -304,13 +327,28 @@ int main(int argc, char *argv[]) {
 }
 
 void build_request(const char *url, struct parameter *para) {
-  char tmp[10];
+  const char *host_start;
+  const char *path;
+  const char *port_str = NULL;
+  size_t host_len;
+  size_t off = 0;
+  char *req = para->request;
   int i;
 
-  if (!para->proxy) {
-    bzero(para->host, MAXHOSTNAMELEN);
-  }
-  bzero(para->request, REQUEST_SIZE);
+/* 追加到请求缓冲区，长度不足时报错退出，避免缓冲区溢出 */
+#define APPEND(...)                                                          \
+  do {                                                                       \
+    int written = snprintf(req + off, REQUEST_SIZE - off, __VA_ARGS__);      \
+    if (written < 0 || (size_t)written >= REQUEST_SIZE - off) {              \
+      fprintf(stderr, "Request is too long.\n");                             \
+      exit(2);                                                               \
+    }                                                                        \
+    off += (size_t)written;                                                  \
+  } while (0)
+
+  if (!para->proxy)
+    memset(para->host, 0, MAXHOSTNAMELEN);
+  memset(para->request, 0, REQUEST_SIZE);
 
   if (para->force_reload && para->proxy && para->http_ver < HTTP_10)
     para->http_ver = HTTP_10;
@@ -320,9 +358,6 @@ void build_request(const char *url, struct parameter *para) {
     para->http_ver = HTTP_11;
   if (para->method == METHOD_TRACE && para->http_ver < HTTP_11)
     para->http_ver = HTTP_11;
-
-  strcpy(para->request, gs_http_method[para->method]);
-  strcat(para->request, " ");
 
   if (NULL == strstr(url, "://")) {
     fprintf(stderr, "\n%s: is not a valid URL.\n", url);
@@ -340,53 +375,87 @@ void build_request(const char *url, struct parameter *para) {
     }
   /* protocol/host delimiter */
   i = strstr(url, "://") - url + 3;
-  /* printf("%d\n",i); */
 
-  if (strchr(url + i, '/') == NULL) {
+  path = strchr(url + i, '/');
+  if (path == NULL) {
     fprintf(stderr, "\nInvalid URL syntax - hostname don't ends with '/'.\n");
     exit(2);
   }
+
+  APPEND("%s ", gs_http_method[para->method]);
+
   if (para->proxy) {
-    strcat(para->request, url);
+    APPEND("%s", url);
   } else {
-    /* get port from hostname */
-    if (index(url + i, ':') != NULL &&
-        index(url + i, ':') < index(url + i, '/')) {
-      strncpy(para->host, url + i, strchr(url + i, ':') - url - i);
-      bzero(tmp, 10);
-      strncpy(tmp, index(url + i, ':') + 1,
-              strchr(url + i, '/') - index(url + i, ':') - 1);
-      /* printf("tmp=%s\n",tmp); */
-      para->port = atoi(tmp);
-      if (para->port == 0)
-        para->port = DEFAULT_PORT;
+    host_start = url + i;
+    if (*host_start == '[') {
+      /* IPv6 字面量，如 http://[::1]/ 或 http://[::1]:8080/ */
+      const char *bracket = strchr(host_start, ']');
+      if (bracket == NULL || bracket > path) {
+        fprintf(stderr, "\nInvalid IPv6 address in URL.\n");
+        exit(2);
+      }
+      host_start++;
+      host_len = (size_t)(bracket - host_start);
+      if (bracket + 1 < path) {
+        if (bracket[1] != ':') {
+          fprintf(stderr, "\nInvalid URL syntax after IPv6 address.\n");
+          exit(2);
+        }
+        port_str = bracket + 2;
+      }
     } else {
-      strncpy(para->host, url + i, strcspn(url + i, "/"));
+      const char *colon = strchr(host_start, ':');
+      if (colon != NULL && colon < path) {
+        host_len = (size_t)(colon - host_start);
+        port_str = colon + 1;
+      } else {
+        host_len = (size_t)(path - host_start);
+      }
     }
-    strcat(para->request + strlen(para->request),
-           url + i + strcspn(url + i, "/"));
+    if (host_len == 0 || host_len >= MAXHOSTNAMELEN) {
+      fprintf(stderr, "\nInvalid hostname in URL.\n");
+      exit(2);
+    }
+    memcpy(para->host, host_start, host_len);
+    para->host[host_len] = '\0';
+
+    if (port_str != NULL) {
+      size_t port_len = (size_t)(path - port_str);
+      char port_buf[16];
+      if (port_len == 0 || port_len >= sizeof port_buf) {
+        fprintf(stderr, "\nInvalid port in URL.\n");
+        exit(2);
+      }
+      memcpy(port_buf, port_str, port_len);
+      port_buf[port_len] = '\0';
+      if (parse_int(port_buf, &para->port) != 0 || para->port <= 0 ||
+          para->port > 65535) {
+        fprintf(stderr, "\nInvalid port in URL.\n");
+        exit(2);
+      }
+    }
+    APPEND("%s", path);
   }
-  if (para->http_ver == 1)
-    strcat(para->request, " HTTP/1.0");
-  else if (para->http_ver == 2)
-    strcat(para->request, " HTTP/1.1");
-  strcat(para->request, "\r\n");
+
+  if (para->http_ver == HTTP_10)
+    APPEND(" HTTP/1.0");
+  else if (para->http_ver == HTTP_11)
+    APPEND(" HTTP/1.1");
+  APPEND("\r\n");
   if (para->http_ver > 0)
-    strcat(para->request, "User-Agent: SuperWebBench " PROGRAM_VERSION "\r\n");
-  if (!para->proxy && para->http_ver > 0) {
-    strcat(para->request, "Host: ");
-    strcat(para->request, para->host);
-    strcat(para->request, "\r\n");
-  }
-  if (para->force_reload && para->proxy) {
-    strcat(para->request, "Pragma: no-cache\r\n");
-  }
+    APPEND("User-Agent: SuperWebBench " PROGRAM_VERSION "\r\n");
+  if (!para->proxy && para->http_ver > 0)
+    APPEND("Host: %s\r\n", para->host);
+  if (para->force_reload && para->proxy)
+    APPEND("Pragma: no-cache\r\n");
   if (para->http_ver > 1)
-    strcat(para->request, "Connection: close\r\n");
+    APPEND("Connection: close\r\n");
   /* add empty line at end */
   if (para->http_ver > 0)
-    strcat(para->request, "\r\n");
-  // printf("Req=%s\n",para->request);
+    APPEND("\r\n");
+
+#undef APPEND
 }
 
 /* vraci system rc error kod */
@@ -396,13 +465,14 @@ static int bench(struct parameter *para) {
   unsigned long long failed = 0;
   unsigned long long httperr = 0;
   unsigned long long bytes = 0;
+  pthread_attr_t attr;
   // set thread args
-  struct thread_arg *args = malloc(sizeof(struct thread_arg) * para->clients);
+  struct thread_arg *args =
+      calloc((size_t)para->clients, sizeof(struct thread_arg));
   if (args == NULL) {
     fprintf(stderr, "Malloc thread args failed. Aborting benchmark.\n");
     return 3;
   }
-  memset(args, 0, sizeof(struct thread_arg) * para->clients);
   for (i = 0; i < para->clients; i++) {
     args[i].host = para->host;
     args[i].port = para->port;
@@ -411,16 +481,10 @@ static int bench(struct parameter *para) {
     args[i].force = para->force;
   }
   // theads
-  pthread_attr_t attr;
   pthread_attr_init(&attr);
   if (pthread_attr_setstacksize(&attr, DEFAULT_STACK_SIZE)) {
-    ; // stack size 32K
     fprintf(stderr, "Set stack size failed . Aborting benchmark.\n");
-    return 3;
-  }
-  pthread_t *threads = malloc(sizeof(pthread_t) * (para->clients));
-  if (threads == NULL) {
-    fprintf(stderr, "Malloc threads failed. Aborting benchmark.\n");
+    free(args);
     return 3;
   }
   printf("\n%d clients, running %d sec", para->clients, para->bench_time);
@@ -432,16 +496,26 @@ static int bench(struct parameter *para) {
     printf(", forcing reload");
   printf(".\n");
   // new thread
+  atomic_store(&bench_stop, 0);
   for (i = 0; i < para->clients; i++) {
-    int ret_p = pthread_create(threads + i, &attr, bench_thread, args + i);
+    int ret_p =
+        pthread_create(&args[i].thread, &attr, bench_thread, args + i);
     if (ret_p) {
       printf("pthread create error %d on %d\n", ret_p, i);
-      /* 创建失败的客户端槽位已被清零，跳过即可；不再修改 i/para->clients，避免死循环与已创建线程的计数错位 */
-      // exit (-1);
+      /* 创建失败的槽位保持 started=0，计数为零，不影响其他客户端 */
+    } else {
+      args[i].started = 1;
     }
   }
+  pthread_attr_destroy(&attr);
   // main thread sleep
   sleep(para->bench_time);
+  /* 通知工作线程停止并等待其退出，确保计数完整、线程资源被回收 */
+  atomic_store(&bench_stop, 1);
+  for (i = 0; i < para->clients; i++) {
+    if (args[i].started)
+      pthread_join(args[i].thread, NULL);
+  }
   // calc the result
   for (i = 0; i < para->clients; i++) {
     speed += args[i].speed;
@@ -449,6 +523,7 @@ static int bench(struct parameter *para) {
     failed += args[i].failed;
     bytes += args[i].bytes;
   }
+  free(args);
   printf("\nSpeed=%llu requests/sec (total), %llu pages/sec (success), %llu bytes/sec.\nRequests: %llu ok, %llu "
          "http error, %llu failed.\n",
          (speed + httperr + failed) / para->bench_time,
@@ -471,6 +546,8 @@ void *bench_thread(void *arg) {
 
   while (1) {
   outloop:
+    if (atomic_load(&bench_stop))
+      break;
     s = Socket(p_arg->host, p_arg->port);
     if (s < 0) {
       p_arg->failed++;
@@ -509,7 +586,6 @@ void *bench_thread(void *arg) {
     }
     p_arg->speed++;
   }
-  // never return  from here
   return NULL;
 }
 int http_response_check(const char *response) {
