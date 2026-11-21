@@ -259,7 +259,8 @@ make superwebbench
 ├── superwebbench.1    # man 手册
 ├── README             # 原始项目说明
 ├── README.md          # 中文使用说明
-└── Changelog          # 历史变更记录
+├── Changelog          # 历史变更记录
+└── LICENSE            # GNU GPL v2 许可证全文
 ```
 
 ## 版权与许可证
@@ -269,4 +270,4 @@ make superwebbench
 - `socket.c` 中的 UNIX Socket 代码取自 popclient 1.5，原始代码为 public domain，由 Virginia Tech Computing Center 创建。
 - 主程序源码声明采用 **GNU General Public License version 2（GPL v2）**。
 
-原始版权说明保留在源码、`README` 和 `superwebbench.1` 中。当前仓库未包含独立的 `LICENSE` 或 `COPYING` 许可证全文文件。
+原始版权说明保留在源码、`README` 和 `superwebbench.1` 中，许可证全文见 [LICENSE](LICENSE)。
