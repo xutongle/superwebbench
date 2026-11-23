@@ -1,160 +1,162 @@
 # SuperWebBench
 
+[简体中文](README.md) | **English**
+
 [![GitHub stars](https://img.shields.io/github/stars/xutongle/superwebbench?style=flat-square)](https://github.com/xutongle/superwebbench/stargazers)
 [![GitHub forks](https://img.shields.io/github/forks/xutongle/superwebbench?style=flat-square)](https://github.com/xutongle/superwebbench/network/members)
 [![GitHub issues](https://img.shields.io/github/issues/xutongle/superwebbench?style=flat-square)](https://github.com/xutongle/superwebbench/issues)
 [![GitHub license](https://img.shields.io/github/license/xutongle/superwebbench?style=flat-square)](LICENSE)
 
-基于 Webbench 重构与扩展的命令行压测工具，使用 C11 和 POSIX Threads 模拟多客户端并发请求，支持 HTTP/HTTPS、IPv4/IPv6，能够统计请求成功率、HTTP 错误、失败请求、QPS 及网络吞吐量，用于 Web 服务性能测试与容量评估。
+A command-line load testing tool refactored and extended from Webbench. Built with C11 and POSIX Threads, it simulates concurrent client requests, supports HTTP/HTTPS and IPv4/IPv6, and reports request success rates, HTTP errors, failed requests, QPS, and network throughput for web service performance testing and capacity planning.
 
-当前版本：**1.0.1**，详细变更见 [Changelog](Changelog)。
+Current version: **1.0.1**. See the [Changelog](Changelog) for detailed changes.
 
-> 请仅对自己拥有或获得明确授权的服务器进行压测。高并发请求可能消耗大量网络、连接和系统资源，并影响目标服务及同机其他业务。
+> Only run load tests against servers that you own or are explicitly authorized to test. High-concurrency requests can consume significant network, connection, and system resources, and may affect the target service and other workloads on the same machine.
 
-## 功能特性
+## Features
 
-- 使用 POSIX 线程模拟并发客户端，默认线程栈大小为 32 KiB。
-- 到时后工作线程正常停止，主线程 `pthread_join` 回收并完整汇总计数。
-- 支持 IPv4 与 IPv6 目标，地址解析使用线程安全的 `getaddrinfo`。
-- 支持直接测试 HTTPS 地址，使用 OpenSSL 建立 TLS 连接，发送 SNI 并验证证书链及主机名或 IP。
-- 支持 GET、HEAD、OPTIONS、TRACE 请求方法选项。
-- 支持通过 `-H` / `--header` 重复添加自定义 HTTP 请求头。
-- 支持 HTTP/0.9、HTTP/1.0 和 HTTP/1.1。
-- 支持自定义并发客户端数和测试时长。
-- 支持发送后不等待响应的 `--force` 模式。
-- 提供代理和禁止代理缓存相关选项。
-- 普通模式下检查 HTTP 响应状态，仅将 2xx 响应计为成功。
-- 统计成功请求、HTTP 错误、失败请求、每秒请求数和每秒接收字节数。
-- 支持人类可读的文本输出和便于脚本解析的 JSON 输出。
+- Simulates concurrent clients with POSIX threads, using a default thread stack size of 32 KiB.
+- Stops worker threads gracefully when the test duration expires; the main thread reclaims them with `pthread_join` and fully aggregates all counters.
+- Supports IPv4 and IPv6 targets, with thread-safe address resolution through `getaddrinfo`.
+- Supports direct HTTPS testing by establishing TLS connections with OpenSSL, sending SNI, and validating the certificate chain and hostname or IP address.
+- Provides GET, HEAD, OPTIONS, and TRACE request method options.
+- Supports repeated `-H` / `--header` options for adding custom HTTP request headers.
+- Supports HTTP/0.9, HTTP/1.0, and HTTP/1.1.
+- Supports configurable concurrent client counts and test durations.
+- Supports a `--force` mode that sends requests without waiting for responses.
+- Provides proxy and proxy-cache bypass options.
+- Checks HTTP response status in normal mode and counts only 2xx responses as successful.
+- Reports successful requests, HTTP errors, failed requests, requests per second, and received bytes per second.
+- Supports human-readable text output and script-friendly JSON output.
 
-## 运行环境
+## Requirements
 
-项目主要面向 Linux 和其他 Unix-like 系统，使用以下系统接口和工具：
+The project primarily targets Linux and other Unix-like systems and uses the following system interfaces and tools:
 
-- C 编译器（默认使用 `gcc`）和 Make。
-- POSIX Threads（pthread）。
-- POSIX/BSD Socket、`getaddrinfo`（IPv4/IPv6）和 `getopt_long`。
-- OpenSSL 1.1 或更高版本（`libssl` 和 `libcrypto`，用于 HTTPS）。
-- `sys/resource.h` 中的资源限制接口。
-- C11 `<stdatomic.h>`（用于工作线程停止标志）。
+- A C compiler (`gcc` by default) and Make.
+- POSIX Threads (pthread).
+- POSIX/BSD sockets, `getaddrinfo` (IPv4/IPv6), and `getopt_long`.
+- OpenSSL 1.1 or later (`libssl` and `libcrypto`, for HTTPS).
+- Resource limit interfaces from `sys/resource.h`.
+- C11 `<stdatomic.h>` for worker thread stop flags.
 
-源码未针对 Windows 进行适配。已在 macOS（clang）验证可编译运行，其他 Unix-like 平台建议自行 `make` 验证。
+The source code has not been adapted for Windows. Compilation and operation have been verified on macOS (clang); on other Unix-like platforms, run `make` to verify compatibility.
 
-Makefile 优先通过 `pkg-config` 获取 OpenSSL 编译和链接参数，未找到时默认使用 `-lssl -lcrypto`。如果 OpenSSL 安装在非标准路径，可以通过 `OPENSSL_CFLAGS` 和 `OPENSSL_LIBS` 显式指定。
+The Makefile first uses `pkg-config` to obtain OpenSSL compiler and linker flags, falling back to `-lssl -lcrypto` if they are unavailable. If OpenSSL is installed in a non-standard location, specify `OPENSSL_CFLAGS` and `OPENSSL_LIBS` explicitly.
 
-`ctags` 仅用于生成源码索引，不是编译和运行的必需依赖。默认 `make` 会在生成索引前检查 `ctags` 是否可用：已安装时执行 `ctags *.c`，未安装时显示跳过提示并继续，不影响二进制文件编译。
+`ctags` is used only to generate the source index and is not required to compile or run the program. Before generating the index, the default `make` target checks whether `ctags` is available. If installed, it runs `ctags *.c`; otherwise, it prints a skip notice and continues without affecting compilation of the binary.
 
-## 编译与安装
+## Build and Installation
 
-### 编译
+### Build
 
-在项目根目录执行：
+Run the following command in the project root directory:
 
 ```bash
 make
 ```
 
-编译完成后生成 `superwebbench` 可执行文件。
+The build produces the `superwebbench` executable.
 
-如果不需要生成 ctags 索引，可以只编译程序：
+To compile only the program without generating a ctags index:
 
 ```bash
 make superwebbench
 ```
 
-清理编译产物：
+To clean build artifacts:
 
 ```bash
 make clean
 ```
 
-### 安装
+### Installation
 
-默认安装到 `/usr` 目录下：
+Install under `/usr` by default:
 
 ```bash
 sudo make install
 ```
 
-也可以指定其他安装前缀，例如：
+You can also specify another installation prefix, for example:
 
 ```bash
 sudo make install PREFIX=/usr/local
 ```
 
-安装内容包括：
+The installation includes:
 
-- 可执行文件：`$(PREFIX)/bin/superwebbench`
-- man 手册：`$(PREFIX)/share/man/man1/superwebbench.1`
-- 项目文档：`$(PREFIX)/share/doc/superwebbench/`
+- Executable: `$(PREFIX)/bin/superwebbench`
+- Man page: `$(PREFIX)/share/man/man1/superwebbench.1`
+- Project documentation: `$(PREFIX)/share/doc/superwebbench/`
 
-安装后可查看命令手册：
+After installation, view the command manual with:
 
 ```bash
 man superwebbench
 ```
 
-构建软件包时，可以通过 `DESTDIR` 安装到暂存目录：
+When building a package, use `DESTDIR` to install into a staging directory:
 
 ```bash
 make install DESTDIR=/tmp/superwebbench-package PREFIX=/usr
 ```
 
-### 源码打包
+### Source Packaging
 
-以下命令会先清理编译产物，再生成 `superwebbench-1.0.1.tar.gz`：
+The following command cleans build artifacts and then creates `superwebbench-1.0.1.tar.gz`:
 
 ```bash
 make tar
 ```
 
-### 自动化构建与发布
+### Automated Builds and Releases
 
-GitHub Actions 会在 Ubuntu 和 macOS 上自动编译，并执行版本与帮助命令的冒烟测试。推送任意标签时会创建 GitHub Release，上传源码包和 `superwebbench-<tag>-linux-x86_64.tar.gz` 二进制包。
+GitHub Actions automatically builds on Ubuntu and macOS and runs smoke tests for the version and help commands. Pushing any tag creates a GitHub Release and uploads the source package and the `superwebbench-<tag>-linux-x86_64.tar.gz` binary package.
 
-## 快速开始
+## Quick Start
 
-查看帮助和版本：
+View help and version information:
 
 ```bash
 ./superwebbench --help
 ./superwebbench --version
 ```
 
-使用默认配置测试目标地址，即 1 个客户端运行 30 秒：
+Test a target with the default configuration of 1 client running for 30 seconds:
 
 ```bash
 ./superwebbench http://127.0.0.1/
 ```
 
-使用 100 个并发客户端测试 30 秒：
+Run a 30-second test with 100 concurrent clients:
 
 ```bash
 ./superwebbench -c 100 -t 30 http://example.com/
 ```
 
-使用 HEAD 方法、HTTP/1.0 协议，以 50 个客户端测试 10 秒：
+Use the HEAD method and HTTP/1.0 with 50 clients for 10 seconds:
 
 ```bash
 ./superwebbench -c 50 -t 10 --head -1 http://example.com/
 ```
 
-测试非默认端口：
+Test a non-default port:
 
 ```bash
 ./superwebbench -c 20 -t 10 http://127.0.0.1:8080/
 ```
 
-直接测试 HTTPS 地址，未指定端口时默认使用 443：
+Test an HTTPS address directly; port 443 is used when no port is specified:
 
 ```bash
 ./superwebbench -c 20 -t 10 https://example.com/
 ./superwebbench -c 20 -t 10 https://example.com:8443/
 ```
 
-HTTPS 默认验证 CA 证书链以及目标主机名或 IP。使用私有 CA 时，可通过 OpenSSL 标准的 `SSL_CERT_FILE` 或 `SSL_CERT_DIR` 环境变量配置信任证书。
+By default, HTTPS validates the CA certificate chain and the target hostname or IP address. When using a private CA, configure trusted certificates through the standard OpenSSL `SSL_CERT_FILE` or `SSL_CERT_DIR` environment variables.
 
-通过重复的 `-H` 或 `--header` 参数添加自定义请求头：
+Add custom request headers by repeating `-H` or `--header`:
 
 ```bash
 ./superwebbench \
@@ -165,66 +167,66 @@ HTTPS 默认验证 CA 证书链以及目标主机名或 IP。使用私有 CA 时
   https://example.com/api
 ```
 
-每个参数添加一个 `Name: Value` 格式的请求头，自定义请求头按参数顺序追加到默认请求头之后，同名字段不会去重。字段名必须符合 HTTP token 规则，值不能包含换行等控制字符。HTTP/0.9 不支持请求头，因此同时使用 `--http09` 和 `-H` 时会自动升级到 HTTP/1.0。
+Each option adds one header in `Name: Value` format. Custom headers are appended after the default headers in argument order, and fields with the same name are not deduplicated. Field names must follow the HTTP token rules, and values must not contain newlines or other control characters. HTTP/0.9 does not support request headers, so combining `--http09` with `-H` automatically upgrades the request to HTTP/1.0.
 
-发送请求后不读取响应，直接关闭连接：
+Send requests and close connections without reading responses:
 
 ```bash
 ./superwebbench -c 20 -t 10 --force http://127.0.0.1/
 ```
 
-`--force` 模式会产生更高的请求压力，其成功计数只表示请求发送和连接关闭流程完成，不代表服务器返回了 HTTP 2xx 响应。
+`--force` mode generates greater request pressure. Its success count indicates only that the request was sent and the connection was closed; it does not mean that the server returned an HTTP 2xx response.
 
-以 JSON 格式输出结果，便于脚本或 CI 解析：
+Output results as JSON for parsing by scripts or CI:
 
 ```bash
 ./superwebbench -c 20 -t 10 --output json http://127.0.0.1:8080/
 ```
 
-也可以将结果直接保存到文件：
+You can also save the results directly to a file:
 
 ```bash
 ./superwebbench -c 20 -t 10 -o json http://127.0.0.1:8080/ > result.json
 ```
 
-## 命令行用法
+## Command-Line Usage
 
 ```text
 superwebbench [options] URL
 ```
 
-| 选项 | 说明 |
+| Option | Description |
 | --- | --- |
-| `-c`, `--clients <n>` | 并发客户端数，默认为 `1`；非数字、负数或 0 会报错并以状态码 2 退出 |
-| `-t`, `--time <sec>` | 测试时长（秒），默认为 `30`；非数字、负数或 0 会报错并以状态码 2 退出 |
-| `-f`, `--force` | 发送请求后不等待响应，直接关闭连接 |
-| `-r`, `--reload` | 使用代理时发送 `Pragma: no-cache` 请求头；代理与 HTTP/0.9 同用时会自动升级到 HTTP/1.0 |
-| `-p`, `--proxy <server:port>` | 通过指定代理服务器 `server:port` 发送请求 |
-| `-o`, `--output <format>` | 结果格式：`text`（默认）或 `json`；其他值会报错并以状态码 2 退出 |
-| `-H`, `--header <name:value>` | 添加自定义 HTTP 请求头，可重复使用；格式错误或包含控制字符时以状态码 2 退出 |
-| `-9`, `--http09` | 使用 HTTP/0.9 风格请求；指定自定义请求头时自动升级到 HTTP/1.0 |
-| `-1`, `--http10` | 使用 HTTP/1.0 |
-| `-2`, `--http11` | 使用 HTTP/1.1，默认值；不支持 Keep-Alive |
-| `--get` | 使用 GET 方法，默认值 |
-| `--head` | 使用 HEAD 方法；HTTP/0.9 下会自动升级到 HTTP/1.0 |
-| `--options` | 使用 OPTIONS 方法；HTTP/1.0 及以下会自动升级到 HTTP/1.1 |
-| `--trace` | 使用 TRACE 方法；HTTP/1.0 及以下会自动升级到 HTTP/1.1 |
-| `-?`, `-h`, `--help` | 显示帮助信息 |
-| `-V`, `--version` | 显示程序版本 |
+| `-c`, `--clients <n>` | Number of concurrent clients; defaults to `1`. Non-numeric, negative, or zero values cause an error and exit with status 2 |
+| `-t`, `--time <sec>` | Test duration in seconds; defaults to `30`. Non-numeric, negative, or zero values cause an error and exit with status 2 |
+| `-f`, `--force` | Close the connection immediately after sending the request without waiting for a response |
+| `-r`, `--reload` | Send a `Pragma: no-cache` request header when using a proxy; combining a proxy with HTTP/0.9 automatically upgrades the request to HTTP/1.0 |
+| `-p`, `--proxy <server:port>` | Send requests through the specified proxy server `server:port` |
+| `-o`, `--output <format>` | Result format: `text` (default) or `json`; other values cause an error and exit with status 2 |
+| `-H`, `--header <name:value>` | Add a custom HTTP request header; may be repeated. Invalid formatting or control characters cause an exit with status 2 |
+| `-9`, `--http09` | Use an HTTP/0.9-style request; automatically upgrades to HTTP/1.0 when custom request headers are specified |
+| `-1`, `--http10` | Use HTTP/1.0 |
+| `-2`, `--http11` | Use HTTP/1.1, the default; Keep-Alive is not supported |
+| `--get` | Use the GET method, the default |
+| `--head` | Use the HEAD method; automatically upgrades from HTTP/0.9 to HTTP/1.0 |
+| `--options` | Use the OPTIONS method; automatically upgrades from HTTP/1.0 or earlier to HTTP/1.1 |
+| `--trace` | Use the TRACE method; automatically upgrades from HTTP/1.0 or earlier to HTTP/1.1 |
+| `-?`, `-h`, `--help` | Display help information |
+| `-V`, `--version` | Display the program version |
 
-注意：版本选项的短参数是大写 `-V`，不是小写 `-v`。
+Note: the short version option is uppercase `-V`, not lowercase `-v`.
 
-## URL 规则
+## URL Rules
 
-直接请求目标服务器时：
+When requesting a target server directly:
 
-- 支持 `http://` 和 `https://`，默认端口分别为 80 和 443。
-- 主机名后必须包含路径，根路径也需要显式写成 `/`。
-- 支持在主机名后指定端口，端口须为 1–65535 的数字。
-- 支持 IPv4、主机名（可解析到 AAAA 记录）以及 `[::1]` 形式的 IPv6 字面量。
-- URL 最大长度为 1500 字节。
+- Both `http://` and `https://` are supported, with default ports 80 and 443 respectively.
+- A path is required after the hostname; the root path must also be written explicitly as `/`.
+- A port may be specified after the hostname and must be a number from 1 to 65535.
+- IPv4 addresses, hostnames (which may resolve to AAAA records), and IPv6 literals in `[::1]` form are supported.
+- The maximum URL length is 1500 bytes.
 
-正确示例：
+Valid examples:
 
 ```text
 http://example.com/
@@ -236,7 +238,7 @@ http://127.0.0.1:8080/
 https://[::1]:8443/
 ```
 
-以下地址会被判定为无效：
+The following addresses are considered invalid:
 
 ```text
 example.com
@@ -245,129 +247,130 @@ http://example.com
 https://example.com
 ```
 
-其中 `http://example.com` 和 `https://example.com` 缺少主机名后的 `/`，应分别在末尾补上 `/`。
+`http://example.com` and `https://example.com` are missing the `/` after the hostname; append `/` to each address.
 
-## 输出说明
+## Output
 
-测试开始前，程序会输出目标 URL、请求方法、HTTP 版本、客户端数和测试时长。测试结束后输出汇总结果：
+Before the test starts, the program prints the target URL, request method, HTTP version, client count, and test duration. After the test finishes, it prints a summary:
 
 ```text
 Speed=3008 requests/sec (total), 3008 pages/sec (success), 2972398 bytes/sec.
 Requests: 6017 ok, 0 http error, 0 failed.
 ```
 
-以上数值仅为输出格式示例，各字段含义如下：
+The values above are examples only. The fields have the following meanings:
 
-| 字段 | 含义 |
+| Field | Meaning |
 | --- | --- |
-| `requests/sec (total)` | 平均每秒总请求数，计算时包含成功、HTTP 错误和失败请求，反映整体吞吐 |
-| `pages/sec (success)` | 平均每秒成功请求数，仅统计 HTTP 2xx 响应 |
-| `bytes/sec` | 平均每秒从服务器接收的响应字节数 |
-| `ok` | 成功请求数；普通模式下仅统计 HTTP 2xx 响应 |
-| `http error` | HTTP 响应未通过 2xx 检查，或未读取到有效响应等异常数量 |
-| `failed` | 连接、写入、读取或关闭 Socket 等操作失败的请求数 |
+| `requests/sec (total)` | Average total requests per second, including successful requests, HTTP errors, and failed requests; reflects overall throughput |
+| `pages/sec (success)` | Average successful requests per second; counts only HTTP 2xx responses |
+| `bytes/sec` | Average response bytes received from the server per second |
+| `ok` | Number of successful requests; counts only HTTP 2xx responses in normal mode |
+| `http error` | Number of HTTP responses that failed the 2xx check or other anomalies, such as failing to read a valid response |
+| `failed` | Number of requests that failed during connection, write, read, socket close, or similar operations |
 
-每个请求都会重新建立 TCP 连接，HTTPS 请求还会重新完成 TLS 握手。普通模式读取响应直到服务器关闭连接，HTTP/1.1 请求会携带 `Connection: close`。
+Each request establishes a new TCP connection, and each HTTPS request also performs a new TLS handshake. Normal mode reads the response until the server closes the connection. HTTP/1.1 requests include `Connection: close`.
 
-### JSON 输出
+### JSON Output
 
-使用 `-o json` 或 `--output json` 时，标准输出仅包含一个完整的 JSON 对象，不再输出版权和进度文本。错误信息仍写入标准错误，退出状态码规则不变。
+When `-o json` or `--output json` is used, standard output contains only one complete JSON object, with no copyright or progress text. Error messages are still written to standard error, and exit status rules remain unchanged.
 
 ```json
 {"version":"1.0.1","url":"http://127.0.0.1:8080/","host":"127.0.0.1","port":8080,"method":"GET","http_version":"HTTP/1.1","clients":20,"duration_seconds":10,"force":false,"proxy":false,"reload":false,"total_requests":6017,"successful_requests":6017,"http_errors":0,"failed_requests":0,"bytes_received":29723980,"requests_per_second":601,"successful_requests_per_second":601,"bytes_per_second":2972398}
 ```
 
-字段对应关系：
+Field reference:
 
-| JSON 字段 | 含义 |
+| JSON Field | Meaning |
 | --- | --- |
-| `total_requests` | 总请求数，等于成功、HTTP 错误和失败请求数之和 |
-| `successful_requests` | 成功请求数 |
-| `http_errors` | HTTP 错误请求数 |
-| `failed_requests` | 失败请求数 |
-| `bytes_received` | 接收的响应总字节数 |
-| `requests_per_second` | 平均每秒总请求数 |
-| `successful_requests_per_second` | 平均每秒成功请求数 |
-| `bytes_per_second` | 平均每秒接收字节数 |
+| `total_requests` | Total requests, equal to the sum of successful requests, HTTP errors, and failed requests |
+| `successful_requests` | Number of successful requests |
+| `http_errors` | Number of HTTP error requests |
+| `failed_requests` | Number of failed requests |
+| `bytes_received` | Total response bytes received |
+| `requests_per_second` | Average total requests per second |
+| `successful_requests_per_second` | Average successful requests per second |
+| `bytes_per_second` | Average received bytes per second |
 
-其余字段记录压测配置，包括 URL、主机、端口、方法、HTTP 版本、客户端数、时长及 force/proxy/reload 开关。JSON 字符串会转义引号、反斜杠和控制字符。
+The remaining fields record the load test configuration, including URL, host, port, method, HTTP version, client count, duration, and the force/proxy/reload switches. JSON strings escape quotation marks, backslashes, and control characters.
 
-## 退出状态码
+## Exit Status Codes
 
-| 状态码 | 含义 |
+| Status | Meaning |
 | --- | --- |
-| `0` | 正常结束，或显示了帮助、版本信息；未知选项或选项缺少必填参数时也会显示帮助并返回此状态码 |
-| `1` | 压测前连接目标失败，或 HTTPS 的 TLS 握手、证书校验失败 |
-| `2` | 命令行参数值或 URL 无效 |
-| `3` | 内部错误，例如内存分配、线程属性设置或 TLS 初始化失败 |
-| `4` | 设置系统资源限制失败 |
+| `0` | Normal termination, or help/version information was displayed; unknown options or options missing required arguments also display help and return this status |
+| `1` | The pre-test connection to the target failed, or the HTTPS TLS handshake or certificate validation failed |
+| `2` | A command-line argument value or URL was invalid |
+| `3` | An internal error occurred, such as a memory allocation, thread attribute setup, or TLS initialization failure |
+| `4` | Failed to set system resource limits |
 
-## 常见问题
+## Troubleshooting
 
-### 未安装 `ctags`
+### `ctags` Is Not Installed
 
-默认 `make` 会提示 `ctags not found, skipping tags generation` 并自动跳过源码索引生成，不影响程序编译。需要生成索引时可以安装 ctags，也可以只编译程序：
+The default `make` target prints `ctags not found, skipping tags generation` and automatically skips source index generation without affecting compilation. Install ctags if you need the index, or compile only the program:
 
 ```bash
 make superwebbench
 ```
 
-### 提示 `Connect to server failed`
+### `Connect to server failed` Is Reported
 
-请检查：
+Check the following:
 
-- URL 是否符合上述格式。
-- 目标服务是否已启动，端口是否正确。
-- 本机能否解析目标主机名并建立 TCP 连接。
-- HTTPS 证书是否由受信任的 CA 签发，且证书中的主机名或 IP 与 URL 匹配。
-- 防火墙或网络策略是否阻止连接。
+- Whether the URL follows the format described above.
+- Whether the target service is running and the port is correct.
+- Whether the local machine can resolve the target hostname and establish a TCP connection.
+- Whether the HTTPS certificate was issued by a trusted CA and its hostname or IP address matches the URL.
+- Whether a firewall or network policy is blocking the connection.
 
-### 提示 `Set NOFILE/NPROC limit failed`
+### `Set NOFILE/NPROC limit failed` Is Reported
 
-程序会根据客户端数尝试调整文件描述符和进程数限制。如果当前用户权限或系统硬限制不足，程序会退出。请降低 `--clients`，或根据操作系统要求调整 `ulimit -n`、`ulimit -u` 及相应系统限制。
+The program attempts to adjust file descriptor and process count limits based on the number of clients. If the current user's permissions or the system's hard limits are insufficient, the program exits. Reduce `--clients`, or adjust `ulimit -n`, `ulimit -u`, and the corresponding system limits as required by your operating system.
 
-## 工作原理
+## How It Works
 
-1. 解析命令行参数、目标主机、端口和请求路径。
-2. 构造 HTTP 请求行及 `User-Agent`、`Host`、`Connection` 等默认请求头，并追加自定义请求头。
-3. 根据并发客户端数检查并调整系统资源限制。
-4. 建立一次测试连接，提前确认目标是否可访问；HTTPS 还会完成 TLS 握手和证书校验。
-5. 为每个客户端创建一个 POSIX 工作线程。
-6. 工作线程循环执行“连接、发送请求、读取响应、关闭连接、更新计数”，HTTPS 连接在发送请求前建立 TLS 会话。
-7. 到达指定时长后，主线程置位停止标志，等待各工作线程结束当前请求并退出（`pthread_join`），再汇总计数输出结果。若目标服务器长时间不响应，退出会等待进行中的请求完成。
+1. Parses command-line arguments, the target host, port, and request path.
+2. Builds the HTTP request line and default headers such as `User-Agent`, `Host`, and `Connection`, then appends custom request headers.
+3. Checks and adjusts system resource limits based on the concurrent client count.
+4. Establishes one test connection to confirm that the target is reachable; HTTPS also completes a TLS handshake and certificate validation.
+5. Creates one POSIX worker thread per client.
+6. Each worker repeatedly connects, sends a request, reads the response, closes the connection, and updates counters. HTTPS connections establish a TLS session before sending the request.
+7. When the specified duration expires, the main thread sets the stop flag, waits for each worker to finish its current request and exit (`pthread_join`), then aggregates the counters and prints the results. If the target server does not respond for a long time, shutdown waits for in-progress requests to complete.
 
-## 当前限制与已知问题
+## Current Limitations and Known Issues
 
-- `--proxy` 按原方式发送 HTTP 代理请求，不支持通过 `CONNECT` 建立 HTTPS 隧道；直接测试 HTTPS 时不要指定该选项。
-- HTTP/1.1 不支持 Keep-Alive，每次请求都会重新建立连接。
-- 请求行与全部请求头共用 2048 字节内部缓冲区，请求过长时会报错并以状态码 2 退出。
-- HTTP/0.9 响应没有状态行，普通模式下无法通过 2xx 状态检查，通常会计入 `http error`；`--force` 模式不读取和校验响应。
+- `--proxy` sends HTTP proxy requests in the original style and does not support HTTPS tunneling through `CONNECT`; do not specify this option when testing HTTPS directly.
+- HTTP/1.1 does not support Keep-Alive; each request establishes a new connection.
+- The request line and all request headers share a 2048-byte internal buffer. An oversized request causes an error and exits with status 2.
+- HTTP/0.9 responses have no status line, so they cannot pass the 2xx status check in normal mode and are usually counted as `http error`; `--force` mode does not read or validate responses.
 
-## 项目结构
+## Project Structure
 
 ```text
 .
 ├── .github/workflows/
-│   ├── ci.yml         # Ubuntu/macOS 构建与冒烟测试
-│   └── release.yml    # 标签触发的 GitHub Release
-├── superwebbench.c    # 主程序、参数解析、HTTP 请求构造和压测逻辑
-├── socket.c           # IPv4/IPv6 TCP 连接及 OpenSSL TLS 传输
-├── socket.h           # Socket 与 TLS 连接接口声明
-├── Makefile           # 编译、安装、清理和打包规则
-├── superwebbench.1    # man 手册
-├── README             # 原始项目说明
-├── README.md          # 中文使用说明
-├── Changelog          # 历史变更记录
-├── LICENSE            # GNU GPL v2 许可证全文
-├── .gitattributes     # Git 导出属性
-└── .gitignore         # Git 忽略规则
+│   ├── ci.yml         # Ubuntu/macOS builds and smoke tests
+│   └── release.yml    # Tag-triggered GitHub Release
+├── superwebbench.c    # Main program, argument parsing, HTTP request construction, and load testing logic
+├── socket.c           # IPv4/IPv6 TCP connections and OpenSSL TLS transport
+├── socket.h           # Socket and TLS connection interface declarations
+├── Makefile           # Build, installation, cleanup, and packaging rules
+├── superwebbench.1    # Man page
+├── README             # Original project description
+├── README.md          # Chinese documentation
+├── README_EN.md       # English documentation
+├── Changelog          # Historical changes
+├── LICENSE            # Full GNU GPL v2 license text
+├── .gitattributes     # Git export attributes
+└── .gitignore         # Git ignore rules
 ```
 
-## 版权与许可证
+## Copyright and License
 
-- 原 Webbench 作者：Radim Kolar，1997–2004。
-- SuperWebBench 修改作者：XuTongle，2012。
-- `socket.c` 中的 UNIX Socket 代码取自 popclient 1.5，原始代码为 public domain，由 Virginia Tech Computing Center 创建。
-- 主程序源码声明采用 **GNU General Public License version 2（GPL v2）**。
+- Original Webbench author: Radim Kolar, 1997–2004.
+- SuperWebBench modifications: XuTongle, 2012.
+- The UNIX socket code in `socket.c` was taken from popclient 1.5. The original code is public domain and was created by the Virginia Tech Computing Center.
+- The main program source code is licensed under the **GNU General Public License version 2 (GPL v2)**.
 
-原始版权说明保留在源码、`README` 和 `superwebbench.1` 中，许可证全文见 [LICENSE](LICENSE)。
+The original copyright notices are preserved in the source code, `README`, and `superwebbench.1`. See [LICENSE](LICENSE) for the full license text.
