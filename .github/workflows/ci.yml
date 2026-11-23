@@ -158,6 +158,8 @@ jobs:
       - name: Build OpenSSL for the target
         env:
           TARGET: ${{ matrix.target }}
+          # 32 位 MIPS 缺少 64 位原子指令，libcrypto 里的原子操作需要 libatomic
+          LDLIBS: -latomic
         run: |
           version=3.0.15
           curl -fsSL -o openssl.tar.gz \
