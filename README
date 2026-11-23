@@ -23,9 +23,13 @@ tar zxvf superwebbench-1.0.1.tar.gz
 cd superwebbench-1.0.1
 ./configure && make && make install
 
-The compiler must support C11 atomics, and OpenSSL 1.1 or later is required.
+The compiler must support C11 atomics. A TLS library is required:
+OpenSSL 1.1 or later is preferred, or mbed TLS 2.x/3.x/4.x is used as a
+fallback. Use --with-tls=auto|openssl|mbedtls to select the backend
+(default: auto, prefer OpenSSL then fall back to mbed TLS).
 Use ./configure --prefix=/usr/local to select another installation prefix.
 For a non-standard OpenSSL installation, set OPENSSL_CFLAGS and OPENSSL_LIBS.
+For a non-standard mbed TLS installation, set MBEDTLS_CFLAGS and MBEDTLS_LIBS.
 
 Maintainers can regenerate configure and config.h.in with:
 autoreconf -fi

@@ -18,7 +18,7 @@
 - 使用 POSIX 线程模拟并发客户端，默认线程栈大小为 32 KiB。
 - 到时后工作线程正常停止，主线程 `pthread_join` 回收并完整汇总计数。
 - 支持 IPv4 与 IPv6 目标，地址解析使用线程安全的 `getaddrinfo`。
-- 支持直接测试 HTTPS 地址，使用 OpenSSL 建立 TLS 连接，发送 SNI 并验证证书链及主机名或 IP。
+- 支持直接测试 HTTPS 地址，建立 TLS 连接（默认优先使用 OpenSSL，OpenSSL 不可用时回退到 mbed TLS），发送 SNI 并验证证书链及主机名或 IP。
 - 支持 GET、HEAD、OPTIONS、TRACE 请求方法选项。
 - 支持通过 `-H` / `--header` 重复添加自定义 HTTP 请求头。
 - 支持 HTTP/0.9、HTTP/1.0 和 HTTP/1.1。
@@ -36,16 +36,18 @@
 - 支持 C11 `<stdatomic.h>` 的 C 编译器、POSIX Shell 和 Make。
 - POSIX Threads（pthread）。
 - POSIX/BSD Socket、`getaddrinfo`（IPv4/IPv6）和 `getopt_long`。
-- OpenSSL 1.1 或更高版本（`libssl` 和 `libcrypto`），并提供 TLS 客户端、SNI、主机名和 IP 校验 API。
+- TLS 库（二选一，配置时默认优先检测 OpenSSL，不可用时回退到 mbed TLS）：
+  - OpenSSL 1.1 或更高版本（`libssl` 和 `libcrypto`），提供 TLS 客户端、SNI、主机名和 IP 校验 API；或
+  - mbed TLS 2.x / 3.x / 4.x（`libmbedtls`、`libmbedx509` 和 `libmbedcrypto`），用于 OpenSSL 不可用的环境。
 - `sys/resource.h` 中的资源限制接口；没有 `RLIMIT_NPROC` 的平台仅跳过该项限制调整。
 
 源码未针对 Windows 进行适配。CI 已覆盖 Ubuntu、macOS、CentOS Stream 9 和 Alpine，并对 32 位 MIPS 的大端和小端目标做交叉编译；其他 Unix-like 平台通过编译期的能力探测进行适配，而不是按操作系统名称判断。
 
-`configure` 优先通过 `pkg-config` 获取 OpenSSL 编译和链接参数，不可用时回退到 `-lssl -lcrypto`。如果 OpenSSL 安装在非标准路径，可以通过 `OPENSSL_CFLAGS` 和 `OPENSSL_LIBS` 显式指定。
+`configure` 默认以 `auto` 模式选择 TLS 后端：先通过 `pkg-config` 检测 OpenSSL，不可用时回退检测 mbed TLS；也可用 `--with-tls=auto|openssl|mbedtls` 显式指定。检测到 OpenSSL 时，编译和链接参数优先取自 `pkg-config`，缺失时回退到 `-lssl -lcrypto`，非标准路径可通过 `OPENSSL_CFLAGS` 和 `OPENSSL_LIBS` 显式指定。选择 mbed TLS 时，参数优先取自 `pkg-config`（必要时回退到 `--static` 以取全私有依赖），非标准路径可通过 `MBEDTLS_CFLAGS` 和 `MBEDTLS_LIBS` 显式指定。
 
 Autoconf 和 Automake 提供的 `aclocal` 仅在重新生成 `configure` 时需要；普通构建直接使用仓库和源码包中已生成的文件。
 
-CentOS 7 需要支持 C11 原子操作的新编译器和 OpenSSL 1.1 或更高版本。原生 GCC 4.8、OpenSSL 1.0.2 工具链会在配置阶段被明确拒绝，不会为了兼容而削弱证书校验。
+CentOS 7 需要支持 C11 原子操作的新编译器，以及 OpenSSL 1.1 或更高版本（也可改用 mbed TLS 作为 TLS 后端）。原生 GCC 4.8、OpenSSL 1.0.2 工具链会在配置阶段被明确拒绝，不会为了兼容而削弱证书校验。
 
 ## 编译与安装
 
@@ -75,6 +77,20 @@ OpenSSL 安装在非标准路径时：
 
 ```bash
 PKG_CONFIG_PATH="$(brew --prefix openssl@3)/lib/pkgconfig" ./configure
+```
+
+选择或强制指定 TLS 后端（默认 `auto`：优先 OpenSSL，回退 mbed TLS）：
+
+```bash
+./configure --with-tls=mbedtls
+```
+
+mbed TLS 安装在非标准路径时：
+
+```bash
+./configure --with-tls=mbedtls \
+  MBEDTLS_CFLAGS="-I/opt/mbedtls/include" \
+  MBEDTLS_LIBS="-L/opt/mbedtls/lib -lmbedtls -lmbedx509 -lmbedcrypto"
 ```
 
 清理编译产物，或同时删除 `configure` 生成的配置文件：
@@ -185,7 +201,7 @@ GitHub Actions 会在 Ubuntu、macOS、CentOS Stream 9 和 Alpine 上编译，�
 ./superwebbench -c 20 -t 10 https://example.com:8443/
 ```
 
-HTTPS 默认验证 CA 证书链以及目标主机名或 IP。使用私有 CA 时，可通过 OpenSSL 标准的 `SSL_CERT_FILE` 或 `SSL_CERT_DIR` 环境变量配置信任证书。
+HTTPS 默认验证 CA 证书链以及目标主机名或 IP。使用私有 CA 时，可通过 `SSL_CERT_FILE` 或 `SSL_CERT_DIR` 环境变量配置信任证书（OpenSSL 与 mbed TLS 后端均支持）。
 
 通过重复的 `-H` 或 `--header` 参数添加自定义请求头：
 
@@ -381,8 +397,11 @@ Requests: 6017 ok, 0 http error, 0 failed.
 ├── install-sh        # 可移植安装辅助脚本
 ├── Makefile.in       # 编译、安装、清理和打包模板
 ├── superwebbench.c   # 主程序、参数解析、HTTP 请求构造和压测逻辑
-├── socket.c          # IPv4/IPv6 TCP 连接及 OpenSSL TLS 传输
+├── socket.c          # IPv4/IPv6 TCP 连接及统一 TLS 传输
 ├── socket.h          # Socket 与 TLS 连接接口声明
+├── tls.h             # TLS 抽象层统一接口声明
+├── tls_openssl.c     # OpenSSL 后端实现
+├── tls_mbedtls.c     # mbed TLS 后端实现（兼容 2.x/3.x/4.x）
 ├── superwebbench.1   # man 手册
 ├── README            # 原始项目说明
 ├── README.md         # 英文使用说明
