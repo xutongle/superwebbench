@@ -29,7 +29,7 @@ jobs:
         run: make tar
 
       - name: Build
-        run: make superwebbench
+        run: make
 
       - name: Verify source archive
         run: |
@@ -39,7 +39,7 @@ jobs:
           tar -xzf "$archive" -C "$verify_dir"
           cd "$verify_dir/$dist_dir"
           ./configure
-          make superwebbench
+          make
           ./superwebbench -V
           ./superwebbench --help >/dev/null
           make install DESTDIR="$verify_dir/stage" PREFIX=/usr

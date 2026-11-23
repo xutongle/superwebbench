@@ -16,7 +16,7 @@
   Rewritten with getaddrinfo(): supports IPv4/IPv6 and is thread-safe.
  ***********************************************************************/
 #ifdef HAVE_CONFIG_H
-#include "config.h"
+#include <config.h>
 #endif
 #include "socket.h"
 #include <arpa/inet.h>

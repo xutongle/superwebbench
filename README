@@ -31,17 +31,7 @@ Maintainers can regenerate configure and config.h.in with:
 autoreconf -fi
 
 *************************************************************
-Question:
-ctags is optional and is only used to generate the source index.
-The default make target checks for ctags and skips index generation when it is unavailable.
-To generate the index, install ctags and run:
-
-make tags
-
-To build only the executable, run:
-
-make superwebbench
-
+Maintenance:
 To remove build artifacts or all configured files, run:
 make clean
 make distclean

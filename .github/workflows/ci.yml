@@ -75,7 +75,7 @@ jobs:
           tar -xzf "$archive" -C "$dist_root"
           cd "$dist_root/$dist_dir"
           ./configure
-          make superwebbench
+          make
           ./superwebbench -V
           ./superwebbench --help >/dev/null
           make install DESTDIR="$RUNNER_TEMP/source-install" PREFIX=/usr

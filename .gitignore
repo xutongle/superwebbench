@@ -1,7 +1,6 @@
 socket.o
 superwebbench.o
 superwebbench
-tags
 .trae
 /Makefile
 /config.h

@@ -23,7 +23,6 @@ INSTALL_DATA = @INSTALL_DATA@
 
 PROGRAM = superwebbench
 OBJS = superwebbench.o socket.o
-SOURCES = $(srcdir)/superwebbench.c $(srcdir)/socket.c
 DOCS = README README.md README_CN.md Changelog LICENSE
 DISTFILES = configure.ac configure config.h.in install-sh Makefile.in \
 	superwebbench.c socket.c socket.h superwebbench.1 $(DOCS)
@@ -33,7 +32,7 @@ DISTARCHIVE = $(DISTDIR).tar.gz
 ALL_CPPFLAGS = -I. -I$(srcdir) $(DEFS) $(CPPFLAGS) $(OPENSSL_CFLAGS)
 ALL_CFLAGS = $(CFLAGS) $(C11_CFLAGS) $(PTHREAD_CFLAGS)
 
-all: $(PROGRAM) tags
+all: $(PROGRAM)
 
 $(PROGRAM): $(OBJS)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(OBJS) $(OPENSSL_LIBS) $(PTHREAD_LIBS) $(ATOMIC_LIBS) $(LIBS)
@@ -43,13 +42,6 @@ superwebbench.o: $(srcdir)/superwebbench.c $(srcdir)/socket.h config.h
 
 socket.o: $(srcdir)/socket.c $(srcdir)/socket.h config.h
 	$(CC) $(ALL_CPPFLAGS) $(ALL_CFLAGS) -c $(srcdir)/socket.c
-
-tags: $(SOURCES)
-	@if command -v ctags >/dev/null 2>&1; then \
-		ctags $(SOURCES); \
-	else \
-		echo "ctags not found, skipping tags generation"; \
-	fi
 
 install: $(PROGRAM)
 	$(INSTALL) -d $(DESTDIR)$(PREFIX)/bin
@@ -62,7 +54,7 @@ install: $(PROGRAM)
 	done
 
 clean:
-	-rm -f $(OBJS) $(PROGRAM) *~ core *.core tags
+	-rm -f $(OBJS) $(PROGRAM) *~ core *.core
 
 distclean: clean
 	-rm -f Makefile config.h config.log config.status stamp-h1

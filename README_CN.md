@@ -43,7 +43,7 @@
 
 `configure` 优先通过 `pkg-config` 获取 OpenSSL 编译和链接参数，不可用时回退到 `-lssl -lcrypto`。如果 OpenSSL 安装在非标准路径，可以通过 `OPENSSL_CFLAGS` 和 `OPENSSL_LIBS` 显式指定。
 
-`ctags` 仅用于生成源码索引，不是编译和运行的必需依赖。Autoconf 和 Automake 提供的 `aclocal` 仅在重新生成 `configure` 时需要；普通构建直接使用仓库和源码包中已生成的文件。
+Autoconf 和 Automake 提供的 `aclocal` 仅在重新生成 `configure` 时需要；普通构建直接使用仓库和源码包中已生成的文件。
 
 CentOS 7 需要支持 C11 原子操作的新编译器和 OpenSSL 1.1 或更高版本。原生 GCC 4.8、OpenSSL 1.0.2 工具链会在配置阶段被明确拒绝，不会为了兼容而削弱证书校验。
 
@@ -75,12 +75,6 @@ OpenSSL 安装在非标准路径时：
 
 ```bash
 PKG_CONFIG_PATH="$(brew --prefix openssl@3)/lib/pkgconfig" ./configure
-```
-
-如果不需要生成 ctags 索引，可以只编译程序：
-
-```bash
-make superwebbench
 ```
 
 清理编译产物，或同时删除 `configure` 生成的配置文件：
@@ -342,14 +336,6 @@ Requests: 6017 ok, 0 http error, 0 failed.
 | `4` | 设置系统资源限制失败 |
 
 ## 常见问题
-
-### 未安装 `ctags`
-
-默认 `make` 会提示 `ctags not found, skipping tags generation` 并自动跳过源码索引生成，不影响程序编译。需要生成索引时可以安装 ctags，也可以只编译程序：
-
-```bash
-make superwebbench
-```
 
 ### 提示 `Connect to server failed`
 
