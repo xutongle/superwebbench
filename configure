@@ -625,10 +625,16 @@ ac_includes_default="\
 ac_header_c_list=
 ac_subst_vars='LTLIBOBJS
 LIBOBJS
+TLS_BACKEND
+TLS_LIBS
+TLS_CFLAGS
+TLS_OBJS
 PTHREAD_LIBS
 PTHREAD_CFLAGS
 ATOMIC_LIBS
 C11_CFLAGS
+MBEDTLS_LIBS
+MBEDTLS_CFLAGS
 OPENSSL_LIBS
 OPENSSL_CFLAGS
 PKG_CONFIG
@@ -684,6 +690,7 @@ SHELL'
 ac_subst_files=''
 ac_user_opts='
 enable_option_checking
+with_tls
 '
       ac_precious_vars='build_alias
 host_alias
@@ -695,7 +702,9 @@ LIBS
 CPPFLAGS
 PKG_CONFIG
 OPENSSL_CFLAGS
-OPENSSL_LIBS'
+OPENSSL_LIBS
+MBEDTLS_CFLAGS
+MBEDTLS_LIBS'
 
 
 # Initialize some variables set by options.
@@ -1310,6 +1319,12 @@ if test -n "$ac_init_help"; then
    esac
   cat <<\_ACEOF
 
+Optional Packages:
+  --with-PACKAGE[=ARG]    use PACKAGE [ARG=yes]
+  --without-PACKAGE       do not use PACKAGE (same as --with-PACKAGE=no)
+  --with-tls=BACKEND      TLS backend to use: 'auto' (default, prefer OpenSSL
+                          then mbed TLS), 'openssl', or 'mbedtls'
+
 Some influential environment variables:
   CC          C compiler command
   CFLAGS      C compiler flags
@@ -1323,6 +1338,10 @@ Some influential environment variables:
               C compiler flags for OpenSSL
   OPENSSL_LIBS
               linker flags for OpenSSL
+  MBEDTLS_CFLAGS
+              C compiler flags for mbed TLS
+  MBEDTLS_LIBS
+              linker flags for mbed TLS
 
 Use these variables to override the choices made by 'configure' or to help
 it to find libraries and programs with nonstandard names/locations.
@@ -4749,6 +4768,8 @@ test -z "$INSTALL_DATA" && INSTALL_DATA='${INSTALL} -m 644'
 
 
 
+
+
 { printf '%s\n' "$as_me:${as_lineno-$LINENO}: checking whether the compiler supports C11 atomics" >&5
 printf %s "checking whether the compiler supports C11 atomics... " >&6; }
 c11_saved_CFLAGS=$CFLAGS
@@ -5549,17 +5570,37 @@ else
   PKG_CONFIG="$ac_cv_path_PKG_CONFIG"
 fi
 
-if test -n "$PKG_CONFIG" && command -v "$PKG_CONFIG" >/dev/null 2>&1
+
+
+# Check whether --with-tls was given.
+if test ${with_tls+y}
+then :
+  withval=$with_tls; with_tls=$withval
+else case e in #(
+  e) with_tls=auto ;;
+esac
+fi
+
+case $with_tls in #(
+  auto | openssl | mbedtls) :
+     ;; #(
+  *) :
+    as_fn_error $? "invalid --with-tls value '$with_tls'; use auto, openssl, or mbedtls" "$LINENO" 5 ;;
+esac
+
+swb_check_openssl () {
+  swb_tls_ok=no
+  if test -n "$PKG_CONFIG" && command -v "$PKG_CONFIG" >/dev/null 2>&1
 then :
 
-  if "$PKG_CONFIG" --exists openssl
+    if "$PKG_CONFIG" --exists openssl
 then :
 
-    if test -z "$OPENSSL_CFLAGS"
+      if test -z "$OPENSSL_CFLAGS"
 then :
   OPENSSL_CFLAGS=`"$PKG_CONFIG" --cflags openssl`
 fi
-    if test -z "$OPENSSL_LIBS"
+      if test -z "$OPENSSL_LIBS"
 then :
   OPENSSL_LIBS=`"$PKG_CONFIG" --libs openssl`
 fi
@@ -5567,33 +5608,33 @@ fi
 fi
 
 fi
-if test -z "$OPENSSL_LIBS"
+  if test -z "$OPENSSL_LIBS"
 then :
   OPENSSL_LIBS="-lssl -lcrypto"
 fi
 
-{ printf '%s\n' "$as_me:${as_lineno-$LINENO}: checking whether OpenSSL provides the required TLS and certificate verification APIs" >&5
+  { printf '%s\n' "$as_me:${as_lineno-$LINENO}: checking whether OpenSSL provides the required TLS and certificate verification APIs" >&5
 printf %s "checking whether OpenSSL provides the required TLS and certificate verification APIs... " >&6; }
-openssl_saved_CPPFLAGS=$CPPFLAGS
-openssl_saved_LIBS=$LIBS
-CPPFLAGS="$OPENSSL_CFLAGS $CPPFLAGS"
-LIBS="$OPENSSL_LIBS $LIBS"
-cat confdefs.h - <<_ACEOF >conftest.$ac_ext
+  swb_saved_CPPFLAGS=$CPPFLAGS
+  swb_saved_LIBS=$LIBS
+  CPPFLAGS="$OPENSSL_CFLAGS $CPPFLAGS"
+  LIBS="$OPENSSL_LIBS $LIBS"
+  cat confdefs.h - <<_ACEOF >conftest.$ac_ext
 /* end confdefs.h.  */
 #include <openssl/ssl.h>
-      #include <openssl/x509v3.h>
+        #include <openssl/x509v3.h>
 int
 main (void)
 {
 SSL_CTX *ctx = SSL_CTX_new(TLS_client_method());
-      SSL *ssl = SSL_new(ctx);
-      X509_VERIFY_PARAM *param = SSL_get0_param(ssl);
-      SSL_CTX_set_default_verify_paths(ctx);
-      SSL_set_tlsext_host_name(ssl, "localhost");
-      SSL_set1_host(ssl, "localhost");
-      X509_VERIFY_PARAM_set1_ip_asc(param, "127.0.0.1");
-      SSL_free(ssl);
-      SSL_CTX_free(ctx);
+        SSL *ssl = SSL_new(ctx);
+        X509_VERIFY_PARAM *param = SSL_get0_param(ssl);
+        SSL_CTX_set_default_verify_paths(ctx);
+        SSL_set_tlsext_host_name(ssl, "localhost");
+        SSL_set1_host(ssl, "localhost");
+        X509_VERIFY_PARAM_set1_ip_asc(param, "127.0.0.1");
+        SSL_free(ssl);
+        SSL_CTX_free(ctx);
   ;
   return 0;
 }
@@ -5602,20 +5643,192 @@ if ac_fn_c_try_link "$LINENO"
 then :
   { printf '%s\n' "$as_me:${as_lineno-$LINENO}: result: yes" >&5
 printf '%s\n' "yes" >&6; }
+     swb_tls_ok=yes
 else case e in #(
   e) { printf '%s\n' "$as_me:${as_lineno-$LINENO}: result: no" >&5
-printf '%s\n' "no" >&6; }
-   CPPFLAGS=$openssl_saved_CPPFLAGS
-   LIBS=$openssl_saved_LIBS
-   as_fn_error $? "OpenSSL 1.1 or later with TLS client, SNI, hostname, and IP verification APIs is required; set OPENSSL_CFLAGS and OPENSSL_LIBS for a non-standard installation" "$LINENO" 5 ;;
+printf '%s\n' "no" >&6; } ;;
 esac
 fi
 rm -f core conftest.err conftest.$ac_objext conftest.beam \
     conftest$ac_exeext conftest.$ac_ext
-CPPFLAGS=$openssl_saved_CPPFLAGS
-LIBS=$openssl_saved_LIBS
+  CPPFLAGS=$swb_saved_CPPFLAGS
+  LIBS=$swb_saved_LIBS
+}
+
+swb_check_mbedtls () {
+  swb_tls_ok=no
+  if test -n "$PKG_CONFIG" && command -v "$PKG_CONFIG" >/dev/null 2>&1
+then :
+
+    if "$PKG_CONFIG" --exists mbedtls
+then :
+
+      if test -z "$MBEDTLS_CFLAGS"
+then :
+  MBEDTLS_CFLAGS=`"$PKG_CONFIG" --cflags mbedtls`
+fi
+      if test -z "$MBEDTLS_LIBS"
+then :
+  MBEDTLS_LIBS=`"$PKG_CONFIG" --libs mbedtls`
+fi
+
+fi
+
+fi
+  if test -z "$MBEDTLS_LIBS"
+then :
+  MBEDTLS_LIBS="-lmbedtls -lmbedx509 -lmbedcrypto"
+fi
+
+  { printf '%s\n' "$as_me:${as_lineno-$LINENO}: checking whether mbed TLS provides the required TLS and X.509 APIs" >&5
+printf %s "checking whether mbed TLS provides the required TLS and X.509 APIs... " >&6; }
+  swb_saved_CPPFLAGS=$CPPFLAGS
+  swb_saved_LIBS=$LIBS
+  CPPFLAGS="$MBEDTLS_CFLAGS $CPPFLAGS"
+  LIBS="$MBEDTLS_LIBS $LIBS"
+  cat confdefs.h - <<_ACEOF >conftest.$ac_ext
+/* end confdefs.h.  */
+#include <mbedtls/version.h>
+        #include <mbedtls/ssl.h>
+        #include <mbedtls/x509_crt.h>
+int
+main (void)
+{
+mbedtls_ssl_config conf;
+        mbedtls_ssl_config_init(&conf);
+        mbedtls_ssl_config_defaults(&conf, MBEDTLS_SSL_IS_CLIENT,
+                                    MBEDTLS_SSL_TRANSPORT_STREAM,
+                                    MBEDTLS_SSL_PRESET_DEFAULT);
+        mbedtls_x509_crt ca;
+        mbedtls_x509_crt_init(&ca);
+        mbedtls_x509_crt_parse_file(&ca, "/dev/null");
+        mbedtls_x509_crt_free(&ca);
+        mbedtls_ssl_config_free(&conf);
+        return 0;
+  ;
+  return 0;
+}
+_ACEOF
+if ac_fn_c_try_link "$LINENO"
+then :
+  { printf '%s\n' "$as_me:${as_lineno-$LINENO}: result: yes" >&5
+printf '%s\n' "yes" >&6; }
+     swb_tls_ok=yes
+else case e in #(
+  e) { printf '%s\n' "$as_me:${as_lineno-$LINENO}: result: no" >&5
+printf '%s\n' "no" >&6; }
+     if test -n "$PKG_CONFIG" && command -v "$PKG_CONFIG" >/dev/null 2>&1 && "$PKG_CONFIG" --exists mbedtls
+then :
+
+              MBEDTLS_LIBS=`"$PKG_CONFIG" --libs --static mbedtls`
+       LIBS="$MBEDTLS_LIBS $swb_saved_LIBS"
+       cat confdefs.h - <<_ACEOF >conftest.$ac_ext
+/* end confdefs.h.  */
+#include <mbedtls/version.h>
+             #include <mbedtls/ssl.h>
+int
+main (void)
+{
+mbedtls_ssl_config conf;
+             mbedtls_ssl_config_init(&conf);
+             mbedtls_ssl_config_defaults(&conf, MBEDTLS_SSL_IS_CLIENT,
+                                         MBEDTLS_SSL_TRANSPORT_STREAM,
+                                         MBEDTLS_SSL_PRESET_DEFAULT);
+             return 0;
+  ;
+  return 0;
+}
+_ACEOF
+if ac_fn_c_try_link "$LINENO"
+then :
+  swb_tls_ok=yes
+fi
+rm -f core conftest.err conftest.$ac_objext conftest.beam \
+    conftest$ac_exeext conftest.$ac_ext
+
+fi ;;
+esac
+fi
+rm -f core conftest.err conftest.$ac_objext conftest.beam \
+    conftest$ac_exeext conftest.$ac_ext
+  CPPFLAGS=$swb_saved_CPPFLAGS
+  LIBS=$swb_saved_LIBS
+}
+
+case $with_tls in #(
+  openssl) :
+    swb_check_openssl
+     if test "x$swb_tls_ok" = xyes
+then :
+  swb_tls_backend=openssl
+else case e in #(
+  e) as_fn_error $? "OpenSSL with TLS client, SNI, hostname, and IP verification APIs is required; set OPENSSL_CFLAGS/OPENSSL_LIBS for a non-standard installation" "$LINENO" 5 ;;
+esac
+fi ;; #(
+  mbedtls) :
+    swb_check_mbedtls
+     if test "x$swb_tls_ok" = xyes
+then :
+  swb_tls_backend=mbedtls
+else case e in #(
+  e) as_fn_error $? "mbed TLS with TLS client and X.509 APIs is required; install mbed TLS 2.x/3.x/4.x" "$LINENO" 5 ;;
+esac
+fi ;; #(
+  auto) :
+    swb_check_openssl
+     if test "x$swb_tls_ok" = xyes
+then :
+  swb_tls_backend=openssl
+else case e in #(
+  e) { printf '%s\n' "$as_me:${as_lineno-$LINENO}: OpenSSL not available; trying mbed TLS as TLS backend" >&5
+printf '%s\n' "$as_me: OpenSSL not available; trying mbed TLS as TLS backend" >&6;}
+        swb_check_mbedtls
+        if test "x$swb_tls_ok" = xyes
+then :
+  swb_tls_backend=mbedtls
+else case e in #(
+  e) as_fn_error $? "neither OpenSSL nor mbed TLS was found; install one of them, or set OPENSSL_CFLAGS/OPENSSL_LIBS or MBEDTLS_CFLAGS/MBEDTLS_LIBS" "$LINENO" 5 ;;
+esac
+fi ;;
+esac
+fi ;; #(
+  *) :
+     ;;
+esac
+
+if test "x$swb_tls_backend" = xopenssl
+then :
 
 
+printf '%s\n' "#define HAVE_OPENSSL 1" >>confdefs.h
+
+  TLS_OBJS=tls_openssl.o
+  TLS_CFLAGS="$OPENSSL_CFLAGS"
+  TLS_LIBS="$OPENSSL_LIBS"
+  TLS_BACKEND=OpenSSL
+
+else case e in #(
+  e)
+
+printf '%s\n' "#define HAVE_MBEDTLS 1" >>confdefs.h
+
+  TLS_OBJS=tls_mbedtls.o
+  TLS_CFLAGS="$MBEDTLS_CFLAGS"
+  TLS_LIBS="$MBEDTLS_LIBS"
+  TLS_BACKEND=mbedTLS
+ ;;
+esac
+fi
+
+
+
+
+
+
+
+
+{ printf '%s\n' "$as_me:${as_lineno-$LINENO}: selected TLS backend: $TLS_BACKEND" >&5
+printf '%s\n' "$as_me: selected TLS backend: $TLS_BACKEND" >&6;}
 
 ac_config_files="$ac_config_files Makefile"
 

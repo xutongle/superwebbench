@@ -9,3 +9,5 @@ superwebbench
 /stamp-h1
 /autom4te.cache/
 /superwebbench-*.tar.gz
+/build-mbedtls
+/build-openssl

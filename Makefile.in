@@ -16,32 +16,45 @@ PTHREAD_LIBS = @PTHREAD_LIBS@
 ATOMIC_LIBS = @ATOMIC_LIBS@
 OPENSSL_CFLAGS = @OPENSSL_CFLAGS@
 OPENSSL_LIBS = @OPENSSL_LIBS@
+MBEDTLS_CFLAGS = @MBEDTLS_CFLAGS@
+MBEDTLS_LIBS = @MBEDTLS_LIBS@
+TLS_OBJS = @TLS_OBJS@
+TLS_CFLAGS = @TLS_CFLAGS@
+TLS_LIBS = @TLS_LIBS@
+TLS_BACKEND = @TLS_BACKEND@
 
 INSTALL = @INSTALL@
 INSTALL_PROGRAM = @INSTALL_PROGRAM@
 INSTALL_DATA = @INSTALL_DATA@
 
 PROGRAM = superwebbench
-OBJS = superwebbench.o socket.o
+OBJS = superwebbench.o socket.o $(TLS_OBJS)
 DOCS = README README.md README_CN.md Changelog LICENSE
 DISTFILES = configure.ac configure config.h.in install-sh Makefile.in \
-	superwebbench.c socket.c socket.h superwebbench.1 $(DOCS)
+	superwebbench.c socket.c socket.h tls.h tls_openssl.c tls_mbedtls.c \
+	superwebbench.1 $(DOCS)
 DISTDIR = $(PACKAGE)-$(VERSION)
 DISTARCHIVE = $(DISTDIR).tar.gz
 
-ALL_CPPFLAGS = -I. -I$(srcdir) $(DEFS) $(CPPFLAGS) $(OPENSSL_CFLAGS)
+ALL_CPPFLAGS = -I. -I$(srcdir) $(DEFS) $(CPPFLAGS) $(TLS_CFLAGS)
 ALL_CFLAGS = $(CFLAGS) $(C11_CFLAGS) $(PTHREAD_CFLAGS)
 
 all: $(PROGRAM)
 
 $(PROGRAM): $(OBJS)
-	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(OBJS) $(OPENSSL_LIBS) $(PTHREAD_LIBS) $(ATOMIC_LIBS) $(LIBS)
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(OBJS) $(TLS_LIBS) $(PTHREAD_LIBS) $(ATOMIC_LIBS) $(LIBS)
 
 superwebbench.o: $(srcdir)/superwebbench.c $(srcdir)/socket.h config.h
 	$(CC) $(ALL_CPPFLAGS) $(ALL_CFLAGS) -c $(srcdir)/superwebbench.c
 
-socket.o: $(srcdir)/socket.c $(srcdir)/socket.h config.h
+socket.o: $(srcdir)/socket.c $(srcdir)/socket.h $(srcdir)/tls.h config.h
 	$(CC) $(ALL_CPPFLAGS) $(ALL_CFLAGS) -c $(srcdir)/socket.c
+
+tls_openssl.o: $(srcdir)/tls_openssl.c $(srcdir)/tls.h config.h
+	$(CC) $(ALL_CPPFLAGS) $(ALL_CFLAGS) -c $(srcdir)/tls_openssl.c
+
+tls_mbedtls.o: $(srcdir)/tls_mbedtls.c $(srcdir)/tls.h config.h
+	$(CC) $(ALL_CPPFLAGS) $(ALL_CFLAGS) -c $(srcdir)/tls_mbedtls.c
 
 install: $(PROGRAM)
 	$(INSTALL) -d $(DESTDIR)$(PREFIX)/bin

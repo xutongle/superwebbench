@@ -131,7 +131,9 @@ jobs:
 
   mips-cross:
     name: Cross-compile for ${{ matrix.target }}
-    runs-on: ubuntu-latest
+    # Ubuntu 26.04 (the current ubuntu-latest) no longer ships the MIPS/MIPSel
+    # cross toolchains, so pin this job to 24.04 where these packages exist.
+    runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
       matrix:

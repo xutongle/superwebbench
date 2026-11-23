@@ -1,12 +1,12 @@
 #ifndef _WEBBENCH_SOCKET
 #define _WEBBENCH_SOCKET
 
-#include <openssl/ssl.h>
+#include "tls.h"
 #include <sys/types.h>
 
 typedef struct {
   int fd;
-  SSL *ssl;
+  TLS *tls;
 } Connection;
 
 int Socket(const char *host, int clientPort);

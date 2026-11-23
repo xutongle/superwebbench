@@ -20,11 +20,17 @@
 /* Define to 1 if you have the <inttypes.h> header file. */
 #undef HAVE_INTTYPES_H
 
+/* Define to 1 if mbed TLS is the selected TLS backend */
+#undef HAVE_MBEDTLS
+
 /* Define to 1 if you have the <minix/config.h> header file. */
 #undef HAVE_MINIX_CONFIG_H
 
 /* Define to 1 if you have the <netdb.h> header file. */
 #undef HAVE_NETDB_H
+
+/* Define to 1 if OpenSSL is the selected TLS backend */
+#undef HAVE_OPENSSL
 
 /* Define to 1 if you have the 'setrlimit' function. */
 #undef HAVE_SETRLIMIT
