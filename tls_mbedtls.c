@@ -54,6 +54,22 @@ static __thread int tls_last_error = 0;
 
 static void tls_set_error(int err) { tls_last_error = err; }
 
+/* mbed TLS I/O 操作是否应重试（阻塞模型下内部循环消化这些状态）。 */
+static int tls_is_retryable(int ret) {
+  if (ret == MBEDTLS_ERR_SSL_WANT_READ || ret == MBEDTLS_ERR_SSL_WANT_WRITE)
+    return 1;
+#ifdef MBEDTLS_ERR_SSL_RECEIVED_NEW_SESSION_TICKET
+  /*
+   * TLS 1.3 服务器可能在握手完成后发送 NewSessionTicket 等握手后消息，
+   * mbed TLS 把它作为错误码返回；应用层应忽略并继续下一次读写
+   * （mbed TLS 官方推荐做法），否则真实 TLS 1.3 站点会请求失败。
+   */
+  if (ret == MBEDTLS_ERR_SSL_RECEIVED_NEW_SESSION_TICKET)
+    return 1;
+#endif
+  return 0;
+}
+
 /* ---- 系统 CA 根证书加载 ---- */
 
 static int file_exists(const char *path) {
@@ -303,8 +319,7 @@ int TLS_handshake(TLS *tls) {
     return -1;
   do {
     ret = mbedtls_ssl_handshake(&tls->ssl);
-  } while (ret == MBEDTLS_ERR_SSL_WANT_READ ||
-           ret == MBEDTLS_ERR_SSL_WANT_WRITE);
+  } while (tls_is_retryable(ret));
   if (ret == 0)
     return 0;
   tls_set_error(ret);
@@ -318,8 +333,7 @@ ssize_t TLS_read(TLS *tls, void *buf, size_t size) {
     return -1;
   do {
     ret = mbedtls_ssl_read(&tls->ssl, buf, size);
-  } while (ret == MBEDTLS_ERR_SSL_WANT_READ ||
-           ret == MBEDTLS_ERR_SSL_WANT_WRITE);
+  } while (tls_is_retryable(ret));
 
   if (ret > 0)
     return (ssize_t)ret;
@@ -337,8 +351,7 @@ ssize_t TLS_write(TLS *tls, const void *buf, size_t size) {
     return -1;
   do {
     ret = mbedtls_ssl_write(&tls->ssl, buf, size);
-  } while (ret == MBEDTLS_ERR_SSL_WANT_READ ||
-           ret == MBEDTLS_ERR_SSL_WANT_WRITE);
+  } while (tls_is_retryable(ret));
 
   if (ret > 0)
     return (ssize_t)ret;
@@ -355,8 +368,7 @@ int TLS_shutdown(TLS *tls) {
     return 0;
   do {
     ret = mbedtls_ssl_close_notify(&tls->ssl);
-  } while (ret == MBEDTLS_ERR_SSL_WANT_READ ||
-           ret == MBEDTLS_ERR_SSL_WANT_WRITE);
+  } while (tls_is_retryable(ret));
 
   if (ret == 0 || ret == MBEDTLS_ERR_SSL_PEER_CLOSE_NOTIFY)
     return 0;
