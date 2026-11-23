@@ -159,7 +159,7 @@ make tar
 
 ### 自动化构建与发布
 
-GitHub Actions 会在 Ubuntu、macOS、CentOS Stream 9 和 Alpine 上编译，执行冒烟测试并验证暂存安装。它还会针对大端和小端 32 位 MIPS 交叉编译（使用同样交叉编译出的 OpenSSL），并校验生成 ELF 的目标机器和字节序。Ubuntu 还会验证维护者再生成流程、本地 HTTP 测试以及从源码包重新构建。推送任意标签时会创建 GitHub Release，上传经过重建验证的源码包和 `superwebbench-<tag>-linux-x86_64.tar.gz` 二进制包。
+GitHub Actions 会在 Ubuntu、macOS、CentOS Stream 9 和 Alpine 上编译，执行冒烟测试并验证暂存安装。它还会针对大端和小端 32 位 MIPS 交叉编译（使用同样交叉编译出的 OpenSSL），并校验生成 ELF 的目标机器和字节序。Ubuntu 还会验证维护者再生成流程、本地 HTTP 测试以及从源码包重新构建。推送任意标签时会创建 GitHub Release，上传经过重建验证的源码包，以及面向 `linux-x86_64`、`linux-aarch64`、`linux-mips` 和 `linux-mipsel` 的 musl 静态二进制包（命名为 `superwebbench-<tag>-linux-<arch>-musl-static.tar.gz`）。静态二进制无外部库依赖；默认从 `/etc/ssl` 读取 CA 证书，可通过 `SSL_CERT_FILE` 和 `SSL_CERT_DIR` 覆盖。
 
 ## 快速开始
 

@@ -9,8 +9,8 @@ permissions:
   contents: write
 
 jobs:
-  release:
-    name: Create GitHub Release
+  source:
+    name: Source package
     runs-on: ubuntu-latest
 
     steps:
@@ -28,9 +28,6 @@ jobs:
       - name: Package source tarball
         run: make tar
 
-      - name: Build
-        run: make
-
       - name: Verify source archive
         run: |
           archive=$(ls superwebbench-*.tar.gz)
@@ -47,14 +44,152 @@ jobs:
           test -f "$verify_dir/stage/usr/share/man/man1/superwebbench.1"
           test -f "$verify_dir/stage/usr/share/doc/superwebbench/README_CN.md"
 
-      - name: Package Linux binary
+      - name: Upload source archive
+        uses: actions/upload-artifact@v4
+        with:
+          name: source
+          path: superwebbench-*.tar.gz
+          if-no-files-found: error
+
+  static:
+    name: Static build (${{ matrix.arch }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x86_64
+            triplet: x86_64-linux-musl
+            openssl_target: linux-x86_64
+            extra_libs: ''
+          - arch: aarch64
+            triplet: aarch64-linux-musl
+            openssl_target: linux-aarch64
+            extra_libs: ''
+          # 32 位 MIPS 缺少 64 位原子指令，OpenSSL 需要 libatomic
+          - arch: mips
+            triplet: mips-linux-musl
+            openssl_target: linux-mips32
+            extra_libs: -latomic
+          - arch: mipsel
+            triplet: mipsel-linux-musl
+            openssl_target: linux-mips32
+            extra_libs: -latomic
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: sudo apt-get update && sudo apt-get install -y build-essential perl curl file qemu-user-static
+
+      - name: Install musl cross toolchain
+        env:
+          TRIPLET: ${{ matrix.triplet }}
         run: |
-          tag="${GITHUB_REF_NAME}"
-          tar -czf "superwebbench-${tag}-linux-x86_64.tar.gz" superwebbench
+          curl -fsSL --retry 3 --retry-delay 2 -o /tmp/musl-cross.tgz \
+            "https://musl.cc/${TRIPLET}-cross.tgz"
+          sudo tar -xzf /tmp/musl-cross.tgz -C /opt
+          "/opt/${TRIPLET}-cross/bin/${TRIPLET}-gcc" --version
+
+      - name: Build static OpenSSL
+        env:
+          TRIPLET: ${{ matrix.triplet }}
+          OPENSSL_TARGET: ${{ matrix.openssl_target }}
+          OPENSSL_PREFIX: ${{ github.workspace }}/openssl-${{ matrix.arch }}
+          EXTRA_LIBS: ${{ matrix.extra_libs }}
+        run: |
+          version=3.0.15
+          curl -fsSL --retry 3 --retry-delay 2 -o openssl.tar.gz \
+            "https://github.com/openssl/openssl/releases/download/openssl-${version}/openssl-${version}.tar.gz"
+          tar -xzf openssl.tar.gz
+          cd "openssl-${version}"
+          export PATH="/opt/${TRIPLET}-cross/bin:$PATH"
+          # no-shared：只生成静态库；--openssldir 固定证书目录，运行时可用
+          # SSL_CERT_FILE / SSL_CERT_DIR 覆盖
+          ./Configure "$OPENSSL_TARGET" no-shared no-asm no-tests no-afalgeng \
+            --cross-compile-prefix="${TRIPLET}-" \
+            --prefix="$OPENSSL_PREFIX" \
+            --openssldir=/etc/ssl
+          LDLIBS="$EXTRA_LIBS" make -j"$(nproc)"
+          make install_sw
+
+      - name: Configure and build
+        env:
+          TRIPLET: ${{ matrix.triplet }}
+          OPENSSL_PREFIX: ${{ github.workspace }}/openssl-${{ matrix.arch }}
+          EXTRA_LIBS: ${{ matrix.extra_libs }}
+        run: |
+          export PATH="/opt/${TRIPLET}-cross/bin:$PATH"
+          ./configure \
+            CC="${TRIPLET}-gcc" \
+            CFLAGS="-O2" \
+            LDFLAGS="-static" \
+            LIBS="$EXTRA_LIBS" \
+            OPENSSL_CFLAGS="-I${OPENSSL_PREFIX}/include" \
+            OPENSSL_LIBS="${OPENSSL_PREFIX}/lib/libssl.a ${OPENSSL_PREFIX}/lib/libcrypto.a" \
+            PKG_CONFIG=/bin/false
+          make
+
+      - name: Verify static binary
+        env:
+          TRIPLET: ${{ matrix.triplet }}
+          ARCH: ${{ matrix.arch }}
+        run: |
+          export PATH="/opt/${TRIPLET}-cross/bin:$PATH"
+          file superwebbench
+          if "${TRIPLET}-readelf" -d superwebbench 2>/dev/null | grep -q NEEDED; then
+            echo "error: superwebbench is dynamically linked" >&2
+            exit 1
+          fi
+          if [ "$ARCH" = "x86_64" ]; then
+            ./superwebbench -V
+            ./superwebbench --help >/dev/null
+          else
+            "qemu-${ARCH}-static" ./superwebbench -V
+            "qemu-${ARCH}-static" ./superwebbench --help >/dev/null
+          fi
+
+      - name: Package static binary
+        env:
+          TRIPLET: ${{ matrix.triplet }}
+          ARCH: ${{ matrix.arch }}
+        run: |
+          export PATH="/opt/${TRIPLET}-cross/bin:$PATH"
+          "${TRIPLET}-strip" superwebbench
+          package="superwebbench-${GITHUB_REF_NAME}-linux-${ARCH}-musl-static"
+          mkdir -p "$package"
+          cp superwebbench README.md README_CN.md Changelog LICENSE "$package/"
+          tar -czf "${package}.tar.gz" "$package"
+
+      - name: Upload static binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: static-${{ matrix.arch }}
+          path: superwebbench-*-musl-static.tar.gz
+          if-no-files-found: error
+
+  publish:
+    name: Publish release assets
+    needs:
+      - source
+      - static
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: List assets
+        run: ls -l dist
 
       - name: Publish Release
         uses: softprops/action-gh-release@v2
         with:
           generate_release_notes: true
+          fail_on_unmatched_files: true
           files: |
-            superwebbench-*.tar.gz
+            dist/*.tar.gz

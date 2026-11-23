@@ -159,7 +159,7 @@ The archive includes `configure`, `config.h.in`, and `install-sh`, so recipients
 
 ### Automated Builds and Releases
 
-GitHub Actions builds on Ubuntu, macOS, CentOS Stream 9, and Alpine, runs smoke tests, and verifies staged installation. It also cross-compiles for big- and little-endian 32-bit MIPS against a cross-built OpenSSL and checks the resulting ELF machine and endianness. Ubuntu also verifies maintainer regeneration, a local HTTP test, and rebuilding from the source archive. Pushing any tag creates a GitHub Release and uploads the verified source package and the `superwebbench-<tag>-linux-x86_64.tar.gz` binary package.
+GitHub Actions builds on Ubuntu, macOS, CentOS Stream 9, and Alpine, runs smoke tests, and verifies staged installation. It also cross-compiles for big- and little-endian 32-bit MIPS against a cross-built OpenSSL and checks the resulting ELF machine and endianness. Ubuntu also verifies maintainer regeneration, a local HTTP test, and rebuilding from the source archive. Pushing any tag creates a GitHub Release and uploads the verified source package plus statically linked musl binaries for `linux-x86_64`, `linux-aarch64`, `linux-mips`, and `linux-mipsel` (named `superwebbench-<tag>-linux-<arch>-musl-static.tar.gz`). The static binaries have no external library dependencies; they read CA certificates from `/etc/ssl` and honor `SSL_CERT_FILE` and `SSL_CERT_DIR`.
 
 ## Quick Start
 

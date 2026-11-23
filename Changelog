@@ -7,6 +7,9 @@ superwebbench (1.0.2) unstable; urgency=medium
   * support adding repeated custom HTTP request headers
   * add MIPS cross-compilation CI and link libatomic where required
   * add a Simplified Chinese README and translate README.md to English
+  * publish statically linked musl binaries for x86_64, aarch64, mips, and
+    mipsel as release assets; the CA bundle can be overridden with
+    SSL_CERT_FILE or SSL_CERT_DIR at run time
  -- SuperWebBench contributors  On November 23, 2026
 
 superwebbench (1.0.1) unstable; urgency=medium
