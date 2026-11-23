@@ -18,6 +18,7 @@
 - 支持 IPv4 与 IPv6 目标，地址解析使用线程安全的 `getaddrinfo`。
 - 支持直接测试 HTTPS 地址，使用 OpenSSL 建立 TLS 连接，发送 SNI 并验证证书链及主机名或 IP。
 - 支持 GET、HEAD、OPTIONS、TRACE 请求方法选项。
+- 支持通过 `-H` / `--header` 重复添加自定义 HTTP 请求头。
 - 支持 HTTP/0.9、HTTP/1.0 和 HTTP/1.1。
 - 支持自定义并发客户端数和测试时长。
 - 支持发送后不等待响应的 `--force` 模式。
@@ -153,6 +154,19 @@ GitHub Actions 会在 Ubuntu 和 macOS 上自动编译，并执行版本与帮�
 
 HTTPS 默认验证 CA 证书链以及目标主机名或 IP。使用私有 CA 时，可通过 OpenSSL 标准的 `SSL_CERT_FILE` 或 `SSL_CERT_DIR` 环境变量配置信任证书。
 
+通过重复的 `-H` 或 `--header` 参数添加自定义请求头：
+
+```bash
+./superwebbench \
+  -H "Authorization: Bearer your-token" \
+  -H "Content-Type: application/json" \
+  -H "X-Request-Source: benchmark" \
+  -c 20 -t 30 \
+  https://example.com/api
+```
+
+每个参数添加一个 `Name: Value` 格式的请求头，自定义请求头按参数顺序追加到默认请求头之后，同名字段不会去重。字段名必须符合 HTTP token 规则，值不能包含换行等控制字符。HTTP/0.9 不支持请求头，因此同时使用 `--http09` 和 `-H` 时会自动升级到 HTTP/1.0。
+
 发送请求后不读取响应，直接关闭连接：
 
 ```bash
@@ -187,7 +201,8 @@ superwebbench [options] URL
 | `-r`, `--reload` | 使用代理时发送 `Pragma: no-cache` 请求头；代理与 HTTP/0.9 同用时会自动升级到 HTTP/1.0 |
 | `-p`, `--proxy <server:port>` | 通过指定代理服务器 `server:port` 发送请求 |
 | `-o`, `--output <format>` | 结果格式：`text`（默认）或 `json`；其他值会报错并以状态码 2 退出 |
-| `-9`, `--http09` | 使用 HTTP/0.9 风格请求 |
+| `-H`, `--header <name:value>` | 添加自定义 HTTP 请求头，可重复使用；格式错误或包含控制字符时以状态码 2 退出 |
+| `-9`, `--http09` | 使用 HTTP/0.9 风格请求；指定自定义请求头时自动升级到 HTTP/1.0 |
 | `-1`, `--http10` | 使用 HTTP/1.0 |
 | `-2`, `--http11` | 使用 HTTP/1.1，默认值；不支持 Keep-Alive |
 | `--get` | 使用 GET 方法，默认值 |
@@ -314,7 +329,7 @@ make superwebbench
 ## 工作原理
 
 1. 解析命令行参数、目标主机、端口和请求路径。
-2. 构造 HTTP 请求行及 `User-Agent`、`Host`、`Connection` 等请求头。
+2. 构造 HTTP 请求行及 `User-Agent`、`Host`、`Connection` 等默认请求头，并追加自定义请求头。
 3. 根据并发客户端数检查并调整系统资源限制。
 4. 建立一次测试连接，提前确认目标是否可访问；HTTPS 还会完成 TLS 握手和证书校验。
 5. 为每个客户端创建一个 POSIX 工作线程。
@@ -325,6 +340,7 @@ make superwebbench
 
 - `--proxy` 按原方式发送 HTTP 代理请求，不支持通过 `CONNECT` 建立 HTTPS 隧道；直接测试 HTTPS 时不要指定该选项。
 - HTTP/1.1 不支持 Keep-Alive，每次请求都会重新建立连接。
+- 请求行与全部请求头共用 2048 字节内部缓冲区，请求过长时会报错并以状态码 2 退出。
 - HTTP/0.9 响应没有状态行，普通模式下无法通过 2xx 状态检查，通常会计入 `http error`；`--force` 模式不读取和校验响应。
 
 ## 项目结构

@@ -76,6 +76,8 @@ struct parameter {
   int output;
   char *host;
   char *request;
+  char *custom_headers;
+  size_t custom_headers_length;
 };
 struct thread_arg {
   char *host;
@@ -157,6 +159,39 @@ static int parse_int(const char *str, int *value) {
   return 0;
 }
 
+/* 校验并追加自定义请求头，拒绝非法字段名和控制字符，避免请求头注入 */
+static int add_custom_header(struct parameter *para, const char *header) {
+  const unsigned char *p;
+  const char *colon = strchr(header, ':');
+  size_t length;
+  size_t offset;
+
+  if (colon == NULL || colon == header)
+    return -1;
+  for (p = (const unsigned char *)header;
+       p < (const unsigned char *)colon; p++) {
+    if (!((*p >= 'a' && *p <= 'z') || (*p >= 'A' && *p <= 'Z') ||
+          (*p >= '0' && *p <= '9') ||
+          strchr("!#$%&'*+-.^_`|~", *p) != NULL))
+      return -1;
+  }
+  for (p = (const unsigned char *)colon + 1; *p != '\0'; p++) {
+    if (*p < 0x20 || *p == 0x7f)
+      return -1;
+  }
+
+  length = strlen(header);
+  if (length + 2 >= REQUEST_SIZE - para->custom_headers_length)
+    return -2;
+  offset = para->custom_headers_length;
+  memcpy(para->custom_headers + offset, header, length);
+  memcpy(para->custom_headers + offset + length, "\r\n", 2);
+  offset += length + 2;
+  para->custom_headers[offset] = '\0';
+  para->custom_headers_length = offset;
+  return 0;
+}
+
 static void usage(void) {
   fprintf(
       stderr,
@@ -171,6 +206,7 @@ static void usage(void) {
       "one.\n"
       "  -o|--output <text|json>         Select result output format. Default "
       "text.\n"
+      "  -H|--header <name:value>        Add a custom HTTP header. Repeatable.\n"
       "  -9|--http09                     Use HTTP/0.9 style requests.\n"
       "  -1|--http10                     Use HTTP/1.0 protocol.\n"
       "  -2|--http11                     Use HTTP/1.1 protocol.\n"
@@ -198,6 +234,7 @@ static int parse_opt(int argc, char *argv[], struct parameter *para) {
       {"proxy", required_argument, NULL, 'p'},
       {"clients", required_argument, NULL, 'c'},
       {"output", required_argument, NULL, 'o'},
+      {"header", required_argument, NULL, 'H'},
       {NULL, 0, NULL, 0}};
 
   int opt = 0;
@@ -209,7 +246,7 @@ static int parse_opt(int argc, char *argv[], struct parameter *para) {
     return 0;
   }
 
-  while ((opt = getopt_long(argc, argv, "912Vfrt:p:c:o:?h", long_options,
+  while ((opt = getopt_long(argc, argv, "912Vfrt:p:c:o:H:?h", long_options,
                             &options_index)) != EOF) {
     switch (opt) {
     case 0:
@@ -296,6 +333,18 @@ static int parse_opt(int argc, char *argv[], struct parameter *para) {
         return -1;
       }
       break;
+    case 'H': {
+      int header_status = add_custom_header(para, optarg);
+      if (header_status == -1)
+        fprintf(stderr, "Error in option --header: expected 'Name: Value' with "
+                        "a valid name and no control characters.\n");
+      else if (header_status == -2)
+        fprintf(stderr, "Error in option --header: custom headers are too "
+                        "long.\n");
+      if (header_status != 0)
+        return -1;
+      break;
+    }
     }
   }
 
@@ -312,11 +361,13 @@ int main(int argc, char *argv[]) {
   int ret;
   char host[MAXHOSTNAMELEN];
   char request[REQUEST_SIZE];
+  char custom_headers[REQUEST_SIZE] = {0};
   struct parameter para = {
       DEFAULT_FORCE,    DEFAULT_FORE_RELOAD, DEFAULT_PROXY,
       DEFAULT_HTTPS,    DEFAULT_HTTP_VER,    DEFAULT_METHOD,
       DEFAULT_HTTP_PORT, DEFAULT_CLIENT,     DEFAULT_TIME,
       DEFAULT_OUTPUT,   host,                request,
+      custom_headers,   0,
   };
   // parse options
   if ((ret = parse_opt(argc, argv, &para)) <= 0)
@@ -396,6 +447,8 @@ void build_request(const char *url, struct parameter *para) {
   memset(para->request, 0, REQUEST_SIZE);
 
   if (para->force_reload && para->proxy && para->http_ver < HTTP_10)
+    para->http_ver = HTTP_10;
+  if (para->custom_headers_length > 0 && para->http_ver < HTTP_10)
     para->http_ver = HTTP_10;
   if (para->method == METHOD_HEAD && para->http_ver < HTTP_10)
     para->http_ver = HTTP_10;
@@ -503,6 +556,8 @@ void build_request(const char *url, struct parameter *para) {
     APPEND("Pragma: no-cache\r\n");
   if (para->http_ver > 1)
     APPEND("Connection: close\r\n");
+  if (para->http_ver > 0 && para->custom_headers_length > 0)
+    APPEND("%s", para->custom_headers);
   /* add empty line at end */
   if (para->http_ver > 0)
     APPEND("\r\n");

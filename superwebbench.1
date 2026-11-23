@@ -86,6 +86,12 @@ is 1.
 Select result output format. The default is text. JSON mode writes a single
 JSON object containing benchmark configuration and result counters to stdout,
 without banner or progress text.
+.TP
+.B \-H, \-\-header <name:value>
+Add a custom HTTP request header. This option may be repeated. Header names
+must use valid HTTP token characters, and values must not contain control
+characters. Custom headers are appended after the default headers without
+deduplication. Using this option with HTTP/0.9 upgrades the request to HTTP/1.0.
 .SH "EXIT STATUS"
 .TP
 0 - sucess
