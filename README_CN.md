@@ -39,7 +39,7 @@
 - OpenSSL 1.1 或更高版本（`libssl` 和 `libcrypto`），并提供 TLS 客户端、SNI、主机名和 IP 校验 API。
 - `sys/resource.h` 中的资源限制接口；没有 `RLIMIT_NPROC` 的平台仅跳过该项限制调整。
 
-源码未针对 Windows 进行适配。CI 已覆盖 Ubuntu、macOS、CentOS Stream 9 和 Alpine；其他 Unix-like 平台通过编译期的能力探测进行适配，而不是按操作系统名称判断。
+源码未针对 Windows 进行适配。CI 已覆盖 Ubuntu、macOS、CentOS Stream 9 和 Alpine，并对 32 位 MIPS 的大端和小端目标做交叉编译；其他 Unix-like 平台通过编译期的能力探测进行适配，而不是按操作系统名称判断。
 
 `configure` 优先通过 `pkg-config` 获取 OpenSSL 编译和链接参数，不可用时回退到 `-lssl -lcrypto`。如果 OpenSSL 安装在非标准路径，可以通过 `OPENSSL_CFLAGS` 和 `OPENSSL_LIBS` 显式指定。
 
@@ -143,7 +143,7 @@ make tar
 
 ### 自动化构建与发布
 
-GitHub Actions 会在 Ubuntu、macOS、CentOS Stream 9 和 Alpine 上编译，执行冒烟测试并验证暂存安装。Ubuntu 还会验证维护者再生成流程、本地 HTTP 测试以及从源码包重新构建。推送任意标签时会创建 GitHub Release，上传经过重建验证的源码包和 `superwebbench-<tag>-linux-x86_64.tar.gz` 二进制包。
+GitHub Actions 会在 Ubuntu、macOS、CentOS Stream 9 和 Alpine 上编译，执行冒烟测试并验证暂存安装。它还会针对大端和小端 32 位 MIPS 交叉编译（使用同样交叉编译出的 OpenSSL），并校验生成 ELF 的目标机器和字节序。Ubuntu 还会验证维护者再生成流程、本地 HTTP 测试以及从源码包重新构建。推送任意标签时会创建 GitHub Release，上传经过重建验证的源码包和 `superwebbench-<tag>-linux-x86_64.tar.gz` 二进制包。
 
 ## 快速开始
 
@@ -373,7 +373,7 @@ Requests: 6017 ok, 0 http error, 0 failed.
 ```text
 .
 ├── .github/workflows/
-│   ├── ci.yml         # Linux、macOS、CentOS Stream 和 Alpine 构建
+│   ├── ci.yml         # Linux、macOS、CentOS Stream、Alpine 和 MIPS 交叉构建
 │   └── release.yml    # 标签触发的 GitHub Release 及源码包重建验证
 ├── configure.ac      # Autoconf 能力探测和包版本定义
 ├── configure         # 生成的配置脚本

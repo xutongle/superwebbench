@@ -39,7 +39,7 @@ The project primarily targets Linux and other Unix-like systems and uses the fol
 - OpenSSL 1.1 or later (`libssl` and `libcrypto`) with TLS client, SNI, hostname, and IP verification APIs.
 - Resource limit interfaces from `sys/resource.h`. Platforms without `RLIMIT_NPROC` skip only that limit adjustment.
 
-The source code has not been adapted for Windows. CI verifies Ubuntu, macOS, CentOS Stream 9, and Alpine. Other Unix-like platforms are supported through compile-time capability checks rather than operating-system name detection.
+The source code has not been adapted for Windows. CI verifies Ubuntu, macOS, CentOS Stream 9, and Alpine, and cross-compiles for 32-bit MIPS in both byte orders. Other Unix-like platforms are supported through compile-time capability checks rather than operating-system name detection.
 
 The `configure` script uses `pkg-config` to discover OpenSSL when available and falls back to `-lssl -lcrypto`. If OpenSSL is installed in a non-standard location, specify `OPENSSL_CFLAGS` and `OPENSSL_LIBS` explicitly.
 
@@ -143,7 +143,7 @@ The archive includes `configure`, `config.h.in`, and `install-sh`, so recipients
 
 ### Automated Builds and Releases
 
-GitHub Actions builds on Ubuntu, macOS, CentOS Stream 9, and Alpine, runs smoke tests, and verifies staged installation. Ubuntu also verifies maintainer regeneration, a local HTTP test, and rebuilding from the source archive. Pushing any tag creates a GitHub Release and uploads the verified source package and the `superwebbench-<tag>-linux-x86_64.tar.gz` binary package.
+GitHub Actions builds on Ubuntu, macOS, CentOS Stream 9, and Alpine, runs smoke tests, and verifies staged installation. It also cross-compiles for big- and little-endian 32-bit MIPS against a cross-built OpenSSL and checks the resulting ELF machine and endianness. Ubuntu also verifies maintainer regeneration, a local HTTP test, and rebuilding from the source archive. Pushing any tag creates a GitHub Release and uploads the verified source package and the `superwebbench-<tag>-linux-x86_64.tar.gz` binary package.
 
 ## Quick Start
 
@@ -373,7 +373,7 @@ The program attempts to adjust file descriptor and process count limits based on
 ```text
 .
 ├── .github/workflows/
-│   ├── ci.yml         # Linux, macOS, CentOS Stream, and Alpine builds
+│   ├── ci.yml         # Linux, macOS, CentOS Stream, Alpine, and MIPS cross builds
 │   └── release.yml    # Tag-triggered GitHub Release with source archive verification
 ├── configure.ac      # Autoconf capability checks and package version
 ├── configure         # Generated configuration script

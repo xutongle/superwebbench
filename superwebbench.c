@@ -64,7 +64,12 @@
 #define DEFAULT_OUTPUT OUTPUT_TEXT
 
 #define DEFAULT_FORE_RELOAD 0
+/* 线程栈大小：MIPS 的栈帧更大，叠加 OpenSSL 握手容易踩栈，单独上调到 128 KB */
+#if defined(__mips__)
+#define DEFAULT_STACK_SIZE (128 * 1024)
+#else
 #define DEFAULT_STACK_SIZE 32768
+#endif
 #define DEFAULT_HTTP_VER HTTP_11
 /* globals */
 struct parameter {

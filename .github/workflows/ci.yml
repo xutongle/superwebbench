@@ -128,3 +128,66 @@ jobs:
               test -x /tmp/superwebbench-stage/usr/bin/superwebbench &&
               test -f /tmp/superwebbench-stage/usr/share/doc/superwebbench/README_CN.md
             '
+
+  mips-cross:
+    name: Cross-compile for ${{ matrix.target }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: mipsel-linux-gnu
+            endian: little
+          - target: mips-linux-gnu
+            endian: big
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install cross toolchain
+        env:
+          TARGET: ${{ matrix.target }}
+        run: |
+          abi=${TARGET%%-*}
+          sudo apt-get update
+          sudo apt-get install -y "gcc-${TARGET}" "libatomic1-${abi}-cross"
+
+      - name: Build OpenSSL for the target
+        env:
+          TARGET: ${{ matrix.target }}
+        run: |
+          version=3.0.15
+          curl -fsSL -o openssl.tar.gz \
+            "https://github.com/openssl/openssl/releases/download/openssl-${version}/openssl-${version}.tar.gz"
+          tar -xzf openssl.tar.gz
+          cd "openssl-${version}"
+          # linux-generic32 是字节序中立目标，实际字节序由交叉编译器决定
+          ./Configure linux-generic32 no-asm no-tests no-apps no-afalgeng \
+            --cross-compile-prefix="${TARGET}-" \
+            --prefix="$GITHUB_WORKSPACE/openssl-target"
+          make -j"$(nproc)"
+          make install_sw
+
+      - name: Configure and build
+        env:
+          TARGET: ${{ matrix.target }}
+        run: |
+          ./configure \
+            --build="$(uname -m)-pc-linux-gnu" \
+            --host="$TARGET" \
+            CC="${TARGET}-gcc" \
+            OPENSSL_CFLAGS="-I$GITHUB_WORKSPACE/openssl-target/include" \
+            OPENSSL_LIBS="-L$GITHUB_WORKSPACE/openssl-target/lib -lssl -lcrypto" \
+            PKG_CONFIG=/bin/false
+          make
+
+      - name: Verify target binary
+        env:
+          TARGET: ${{ matrix.target }}
+          ENDIAN: ${{ matrix.endian }}
+        run: |
+          "${TARGET}-readelf" -h superwebbench | tee elf-header.txt
+          grep -q "Machine:.*MIPS" elf-header.txt
+          grep -q "2's complement, ${ENDIAN} endian" elf-header.txt
+          "${TARGET}-objdump" -p superwebbench | grep -q "NEEDED.*libssl"
