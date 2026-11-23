@@ -165,7 +165,7 @@ jobs:
           tar -xzf openssl.tar.gz
           cd "openssl-${version}"
           # linux-generic32 是字节序中立目标，实际字节序由交叉编译器决定
-          ./Configure linux-generic32 no-asm no-tests no-apps no-afalgeng \
+          ./Configure linux-generic32 no-asm no-tests no-afalgeng \
             --cross-compile-prefix="${TARGET}-" \
             --prefix="$GITHUB_WORKSPACE/openssl-target"
           make -j"$(nproc)"

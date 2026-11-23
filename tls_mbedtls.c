@@ -30,6 +30,7 @@
 #include <mbedtls/x509_crt.h>
 #include <pthread.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <sys/socket.h>
 #include <unistd.h>
@@ -60,9 +61,10 @@ static int file_exists(const char *path) {
 }
 
 static int load_system_ca(mbedtls_x509_crt *ca) {
-  /* 常见 CA bundle 文件路径，覆盖 Debian/Ubuntu、RHEL 系、SUSE、macOS/BSD。 */
-  const char *files[] = {
-      getenv("SSL_CERT_FILE"),
+  /* 常见 CA bundle 文件路径，覆盖 Debian/Ubuntu、RHEL 系、SUSE、macOS/BSD。
+   * 用 sizeof 计数而非 NULL 哨兵：环境变量未设置时为 NULL，若放在数组首
+   * 位会让哨兵循环提前终止，因此环境变量单独优先处理。 */
+  static const char *const default_files[] = {
       "/etc/ssl/certs/ca-certificates.crt", /* Debian/Ubuntu */
       "/etc/pki/tls/certs/ca-bundle.crt",   /* RHEL/CentOS/Fedora */
       "/etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem", /* RHEL 新路径 */
@@ -70,30 +72,39 @@ static int load_system_ca(mbedtls_x509_crt *ca) {
       "/etc/ssl/cert.pem",                  /* macOS/BSD */
       "/usr/local/etc/ssl/cert.pem",
       "/usr/share/ssl/certs/ca-bundle.crt",
-      NULL,
   };
-  /* 按目录加载（哈希链接目录）。 */
-  const char *dirs[] = {
-      getenv("SSL_CERT_DIR"),
-      "/etc/ssl/certs",     /* Debian/Ubuntu */
+  static const char *const default_dirs[] = {
+      "/etc/ssl/certs",     /* Debian/Ubuntu（哈希链接目录） */
       "/etc/pki/tls/certs", /* RHEL 系 */
       "/usr/share/ssl/certs",
-      NULL,
   };
+  const char *env_file = getenv("SSL_CERT_FILE");
+  const char *env_dir = getenv("SSL_CERT_DIR");
   size_t i;
   int ret;
 
-  for (i = 0; files[i] != NULL; i++) {
-    if (!file_exists(files[i]))
-      continue;
-    ret = mbedtls_x509_crt_parse_file(ca, files[i]);
+  /* 环境变量指定的 CA 文件最优先。 */
+  if (env_file != NULL && file_exists(env_file)) {
+    ret = mbedtls_x509_crt_parse_file(ca, env_file);
     if (ret >= 0)
       return 0; /* 成功解析（返回值为跳过的条目数） */
   }
-  for (i = 0; dirs[i] != NULL; i++) {
-    if (!file_exists(dirs[i]))
+  for (i = 0; i < sizeof(default_files) / sizeof(default_files[0]); i++) {
+    if (!file_exists(default_files[i]))
       continue;
-    ret = mbedtls_x509_crt_parse_path(ca, dirs[i]);
+    ret = mbedtls_x509_crt_parse_file(ca, default_files[i]);
+    if (ret >= 0)
+      return 0;
+  }
+  if (env_dir != NULL && file_exists(env_dir)) {
+    ret = mbedtls_x509_crt_parse_path(ca, env_dir);
+    if (ret >= 0)
+      return 0;
+  }
+  for (i = 0; i < sizeof(default_dirs) / sizeof(default_dirs[0]); i++) {
+    if (!file_exists(default_dirs[i]))
+      continue;
+    ret = mbedtls_x509_crt_parse_path(ca, default_dirs[i]);
     if (ret >= 0)
       return 0;
   }

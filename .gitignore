@@ -11,3 +11,4 @@ superwebbench
 /superwebbench-*.tar.gz
 /build-mbedtls
 /build-openssl
+tls_openssl.o
