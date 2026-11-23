@@ -1,3 +1,14 @@
+superwebbench (1.0.2) unstable; urgency=medium
+  * refactor the build system into Autotools (configure, Makefile.in)
+  * add a TLS backend abstraction with OpenSSL and mbed TLS support
+  * select the TLS backend automatically, preferring OpenSSL and falling
+    back to mbed TLS with --with-tls=auto
+  * unify mbed TLS retry handling and handle TLS 1.3 session ticket errors
+  * support adding repeated custom HTTP request headers
+  * add MIPS cross-compilation CI and link libatomic where required
+  * add a Simplified Chinese README and translate README.md to English
+ -- SuperWebBench contributors  On November 23, 2026
+
 superwebbench (1.0.1) unstable; urgency=medium
   * fix proxy host/port parsing and the OPTIONS request method name
   * stop and join worker threads on time up, free resources on exit

@@ -9,7 +9,7 @@
 
 基于 Webbench 重构与扩展的命令行压测工具，使用 C11 和 POSIX Threads 模拟多客户端并发请求，支持 HTTP/HTTPS、IPv4/IPv6，能够统计请求成功率、HTTP 错误、失败请求、QPS 及网络吞吐量，用于 Web 服务性能测试与容量评估。
 
-当前版本：**1.0.1**，详细变更见 [Changelog](Changelog)。
+当前版本：**1.0.2**，详细变更见 [Changelog](Changelog)。
 
 > 请仅对自己拥有或获得明确授权的服务器进行压测。高并发请求可能消耗大量网络、连接和系统资源，并影响目标服务及同机其他业务。
 
@@ -149,7 +149,7 @@ make install DESTDIR=/tmp/superwebbench-package PREFIX=/usr
 
 ### 源码打包
 
-以下命令会在不清理当前工作区的情况下生成 `superwebbench-1.0.1.tar.gz`：
+以下命令会在不清理当前工作区的情况下生成 `superwebbench-1.0.2.tar.gz`：
 
 ```bash
 make tar
@@ -323,7 +323,7 @@ Requests: 6017 ok, 0 http error, 0 failed.
 使用 `-o json` 或 `--output json` 时，标准输出仅包含一个完整的 JSON 对象，不再输出版权和进度文本。错误信息仍写入标准错误，退出状态码规则不变。
 
 ```json
-{"version":"1.0.1","url":"http://127.0.0.1:8080/","host":"127.0.0.1","port":8080,"method":"GET","http_version":"HTTP/1.1","clients":20,"duration_seconds":10,"force":false,"proxy":false,"reload":false,"total_requests":6017,"successful_requests":6017,"http_errors":0,"failed_requests":0,"bytes_received":29723980,"requests_per_second":601,"successful_requests_per_second":601,"bytes_per_second":2972398}
+{"version":"1.0.2","url":"http://127.0.0.1:8080/","host":"127.0.0.1","port":8080,"method":"GET","http_version":"HTTP/1.1","clients":20,"duration_seconds":10,"force":false,"proxy":false,"reload":false,"total_requests":6017,"successful_requests":6017,"http_errors":0,"failed_requests":0,"bytes_received":29723980,"requests_per_second":601,"successful_requests_per_second":601,"bytes_per_second":2972398}
 ```
 
 字段对应关系：

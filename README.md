@@ -9,7 +9,7 @@
 
 A command-line load testing tool refactored and extended from Webbench. Built with C11 and POSIX Threads, it simulates concurrent client requests, supports HTTP/HTTPS and IPv4/IPv6, and reports request success rates, HTTP errors, failed requests, QPS, and network throughput for web service performance testing and capacity planning.
 
-Current version: **1.0.1**. See the [Changelog](Changelog) for detailed changes.
+Current version: **1.0.2**. See the [Changelog](Changelog) for detailed changes.
 
 > Only run load tests against servers that you own or are explicitly authorized to test. High-concurrency requests can consume significant network, connection, and system resources, and may affect the target service and other workloads on the same machine.
 
@@ -149,7 +149,7 @@ make install DESTDIR=/tmp/superwebbench-package PREFIX=/usr
 
 ### Source Packaging
 
-The following command creates `superwebbench-1.0.1.tar.gz` without cleaning the working tree:
+The following command creates `superwebbench-1.0.2.tar.gz` without cleaning the working tree:
 
 ```bash
 make tar
@@ -323,7 +323,7 @@ Each request establishes a new TCP connection, and each HTTPS request also perfo
 When `-o json` or `--output json` is used, standard output contains only one complete JSON object, with no copyright or progress text. Error messages are still written to standard error, and exit status rules remain unchanged.
 
 ```json
-{"version":"1.0.1","url":"http://127.0.0.1:8080/","host":"127.0.0.1","port":8080,"method":"GET","http_version":"HTTP/1.1","clients":20,"duration_seconds":10,"force":false,"proxy":false,"reload":false,"total_requests":6017,"successful_requests":6017,"http_errors":0,"failed_requests":0,"bytes_received":29723980,"requests_per_second":601,"successful_requests_per_second":601,"bytes_per_second":2972398}
+{"version":"1.0.2","url":"http://127.0.0.1:8080/","host":"127.0.0.1","port":8080,"method":"GET","http_version":"HTTP/1.1","clients":20,"duration_seconds":10,"force":false,"proxy":false,"reload":false,"total_requests":6017,"successful_requests":6017,"http_errors":0,"failed_requests":0,"bytes_received":29723980,"requests_per_second":601,"successful_requests_per_second":601,"bytes_per_second":2972398}
 ```
 
 Field reference:
