@@ -17,6 +17,9 @@
  *    4 - resourse limits
  *
  */
+#ifdef HAVE_CONFIG_H
+#include "config.h"
+#endif
 #include "socket.h"
 #include <errno.h>
 #include <getopt.h>
@@ -27,13 +30,13 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/param.h>
+#include <strings.h>
 #include <sys/resource.h>
 #include <sys/socket.h>
 #include <sys/time.h>
 #include <unistd.h>
 
-#define PROGRAM_VERSION "1.0.1"
+#define PROGRAM_VERSION PACKAGE_VERSION
 #define METHOD_GET 0
 #define METHOD_HEAD 1
 #define METHOD_OPTIONS 2
@@ -45,6 +48,7 @@
 #define OUTPUT_JSON 1
 
 #define BUF_SIZE 1024
+#define HOST_BUFFER_SIZE 256
 #define URL_SIZE 1500
 #define REQUEST_SIZE 2048
 #define START_SLEEP 10000
@@ -133,6 +137,7 @@ static int resource_set(int clients) {
       return -1;
   }
 
+#if HAVE_DECL_RLIMIT_NPROC
   getrlimit(RLIMIT_NPROC, &lim);                     // get file des limit
   if (lim.rlim_cur < (rlim_t)(used_lim + clients)) { // set file des limit
     lim.rlim_cur = used_lim + clients;
@@ -140,6 +145,7 @@ static int resource_set(int clients) {
     if (setrlimit(RLIMIT_NPROC, &lim))
       return -2;
   }
+#endif
 
   return 0;
 }
@@ -296,7 +302,7 @@ static int parse_opt(int argc, char *argv[], struct parameter *para) {
       }
       *tmp = '\0';
       /* 保存代理主机名，供后续建立连接使用 */
-      if (strlen(optarg) >= MAXHOSTNAMELEN) {
+      if (strlen(optarg) >= HOST_BUFFER_SIZE) {
         fprintf(stderr, "Error in option --proxy %s: hostname too long.\n",
                 optarg);
         return -1;
@@ -359,7 +365,7 @@ static int parse_opt(int argc, char *argv[], struct parameter *para) {
 
 int main(int argc, char *argv[]) {
   int ret;
-  char host[MAXHOSTNAMELEN];
+  char host[HOST_BUFFER_SIZE];
   char request[REQUEST_SIZE];
   char custom_headers[REQUEST_SIZE] = {0};
   struct parameter para = {
@@ -443,7 +449,7 @@ void build_request(const char *url, struct parameter *para) {
   } while (0)
 
   if (!para->proxy)
-    memset(para->host, 0, MAXHOSTNAMELEN);
+    memset(para->host, 0, HOST_BUFFER_SIZE);
   memset(para->request, 0, REQUEST_SIZE);
 
   if (para->force_reload && para->proxy && para->http_ver < HTTP_10)
@@ -518,7 +524,7 @@ void build_request(const char *url, struct parameter *para) {
         host_len = (size_t)(path - host_start);
       }
     }
-    if (host_len == 0 || host_len >= MAXHOSTNAMELEN) {
+    if (host_len == 0 || host_len >= HOST_BUFFER_SIZE) {
       fprintf(stderr, "\nInvalid hostname in URL.\n");
       exit(2);
     }

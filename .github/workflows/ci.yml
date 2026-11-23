@@ -20,20 +20,111 @@ jobs:
 
       - name: Install dependencies (Linux)
         if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y libssl-dev pkg-config
+        run: sudo apt-get update && sudo apt-get install -y autoconf automake libssl-dev pkg-config python3
 
       - name: Install dependencies (macOS)
         if: runner.os == 'macOS'
-        run: brew install ctags openssl@3 pkg-config
+        run: brew install autoconf automake openssl@3 pkg-config
 
-      - name: Build
+      - name: Configure
         run: |
           if [ "$RUNNER_OS" = "macOS" ]; then
             export PKG_CONFIG_PATH="$(brew --prefix openssl@3)/lib/pkgconfig${PKG_CONFIG_PATH:+:$PKG_CONFIG_PATH}"
           fi
-          make
+          ./configure
+
+      - name: Build
+        run: make
 
       - name: Smoke test
         run: |
           ./superwebbench -V
-          ./superwebbench --help
+          ./superwebbench --help >/dev/null
+
+      - name: Verify staged installation
+        run: |
+          stage="$RUNNER_TEMP/stage"
+          make install DESTDIR="$stage" PREFIX=/usr
+          test -x "$stage/usr/bin/superwebbench"
+          test -f "$stage/usr/share/man/man1/superwebbench.1"
+          test -f "$stage/usr/share/doc/superwebbench/README.md"
+          test -f "$stage/usr/share/doc/superwebbench/README_CN.md"
+          test -f "$stage/usr/share/doc/superwebbench/Changelog"
+
+      - name: Verify regeneration, HTTP, and source archive (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          autoreconf -fi
+          make distclean
+          ./configure
+          make
+
+          python3 -m http.server 18080 --bind 127.0.0.1 >"$RUNNER_TEMP/http.log" 2>&1 &
+          server_pid=$!
+          trap 'kill "$server_pid" 2>/dev/null || true' EXIT
+          sleep 1
+          ./superwebbench -c 2 -t 1 -o json http://127.0.0.1:18080/ >"$RUNNER_TEMP/result.json"
+          python3 -m json.tool "$RUNNER_TEMP/result.json" >/dev/null
+
+          make tar
+          archive=$(ls superwebbench-*.tar.gz)
+          dist_dir=${archive%.tar.gz}
+          dist_root="$RUNNER_TEMP/source-package"
+          rm -rf "$dist_root"
+          mkdir -p "$dist_root"
+          tar -xzf "$archive" -C "$dist_root"
+          cd "$dist_root/$dist_dir"
+          ./configure
+          make superwebbench
+          ./superwebbench -V
+          ./superwebbench --help >/dev/null
+          make install DESTDIR="$RUNNER_TEMP/source-install" PREFIX=/usr
+          test -x "$RUNNER_TEMP/source-install/usr/bin/superwebbench"
+
+  centos:
+    name: Build on CentOS Stream 9
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build without Autoconf in container
+        run: |
+          docker run --rm \
+            -v "$GITHUB_WORKSPACE:/work" \
+            -w /work \
+            quay.io/centos/centos:stream9 \
+            sh -c '
+              dnf -y install gcc make pkgconf-pkg-config openssl-devel &&
+              ./configure &&
+              make &&
+              ./superwebbench -V &&
+              ./superwebbench --help >/dev/null &&
+              make install DESTDIR=/tmp/superwebbench-stage PREFIX=/usr &&
+              test -x /tmp/superwebbench-stage/usr/bin/superwebbench &&
+              test -f /tmp/superwebbench-stage/usr/share/doc/superwebbench/README_CN.md
+            '
+
+  alpine:
+    name: Build on Alpine
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build without Autoconf in container
+        run: |
+          docker run --rm \
+            -v "$GITHUB_WORKSPACE:/work" \
+            -w /work \
+            alpine:latest \
+            sh -c '
+              apk add --no-cache build-base coreutils pkgconf openssl-dev &&
+              ./configure &&
+              make &&
+              ./superwebbench -V &&
+              ./superwebbench --help >/dev/null &&
+              make install DESTDIR=/tmp/superwebbench-stage PREFIX=/usr &&
+              test -x /tmp/superwebbench-stage/usr/bin/superwebbench &&
+              test -f /tmp/superwebbench-stage/usr/share/doc/superwebbench/README_CN.md
+            '

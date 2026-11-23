@@ -18,13 +18,34 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Install dependencies
-        run: sudo apt-get update && sudo apt-get install -y libssl-dev pkg-config
+        run: sudo apt-get update && sudo apt-get install -y autoconf automake libssl-dev pkg-config
+
+      - name: Regenerate and configure build system
+        run: |
+          autoreconf -fi
+          ./configure
 
       - name: Package source tarball
         run: make tar
 
       - name: Build
         run: make superwebbench
+
+      - name: Verify source archive
+        run: |
+          archive=$(ls superwebbench-*.tar.gz)
+          dist_dir=${archive%.tar.gz}
+          verify_dir=$(mktemp -d)
+          tar -xzf "$archive" -C "$verify_dir"
+          cd "$verify_dir/$dist_dir"
+          ./configure
+          make superwebbench
+          ./superwebbench -V
+          ./superwebbench --help >/dev/null
+          make install DESTDIR="$verify_dir/stage" PREFIX=/usr
+          test -x "$verify_dir/stage/usr/bin/superwebbench"
+          test -f "$verify_dir/stage/usr/share/man/man1/superwebbench.1"
+          test -f "$verify_dir/stage/usr/share/doc/superwebbench/README_CN.md"
 
       - name: Package Linux binary
         run: |

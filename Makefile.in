@@ -1,0 +1,84 @@
+PACKAGE = @PACKAGE_TARNAME@
+VERSION = @PACKAGE_VERSION@
+srcdir = @srcdir@
+prefix = @prefix@
+PREFIX = $(prefix)
+
+CC = @CC@
+CFLAGS = @CFLAGS@
+CPPFLAGS = @CPPFLAGS@
+DEFS = @DEFS@
+LDFLAGS = @LDFLAGS@
+LIBS = @LIBS@
+C11_CFLAGS = @C11_CFLAGS@
+PTHREAD_CFLAGS = @PTHREAD_CFLAGS@
+PTHREAD_LIBS = @PTHREAD_LIBS@
+ATOMIC_LIBS = @ATOMIC_LIBS@
+OPENSSL_CFLAGS = @OPENSSL_CFLAGS@
+OPENSSL_LIBS = @OPENSSL_LIBS@
+
+INSTALL = @INSTALL@
+INSTALL_PROGRAM = @INSTALL_PROGRAM@
+INSTALL_DATA = @INSTALL_DATA@
+
+PROGRAM = superwebbench
+OBJS = superwebbench.o socket.o
+SOURCES = $(srcdir)/superwebbench.c $(srcdir)/socket.c
+DOCS = README README.md README_CN.md Changelog LICENSE
+DISTFILES = configure.ac configure config.h.in install-sh Makefile.in \
+	superwebbench.c socket.c socket.h superwebbench.1 $(DOCS)
+DISTDIR = $(PACKAGE)-$(VERSION)
+DISTARCHIVE = $(DISTDIR).tar.gz
+
+ALL_CPPFLAGS = -I. -I$(srcdir) $(DEFS) $(CPPFLAGS) $(OPENSSL_CFLAGS)
+ALL_CFLAGS = $(CFLAGS) $(C11_CFLAGS) $(PTHREAD_CFLAGS)
+
+all: $(PROGRAM) tags
+
+$(PROGRAM): $(OBJS)
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(OBJS) $(OPENSSL_LIBS) $(PTHREAD_LIBS) $(ATOMIC_LIBS) $(LIBS)
+
+superwebbench.o: $(srcdir)/superwebbench.c $(srcdir)/socket.h config.h
+	$(CC) $(ALL_CPPFLAGS) $(ALL_CFLAGS) -c $(srcdir)/superwebbench.c
+
+socket.o: $(srcdir)/socket.c $(srcdir)/socket.h config.h
+	$(CC) $(ALL_CPPFLAGS) $(ALL_CFLAGS) -c $(srcdir)/socket.c
+
+tags: $(SOURCES)
+	@if command -v ctags >/dev/null 2>&1; then \
+		ctags $(SOURCES); \
+	else \
+		echo "ctags not found, skipping tags generation"; \
+	fi
+
+install: $(PROGRAM)
+	$(INSTALL) -d $(DESTDIR)$(PREFIX)/bin
+	$(INSTALL) -d $(DESTDIR)$(PREFIX)/share/man/man1
+	$(INSTALL) -d $(DESTDIR)$(PREFIX)/share/doc/superwebbench
+	$(INSTALL_PROGRAM) -s $(PROGRAM) $(DESTDIR)$(PREFIX)/bin/$(PROGRAM)
+	$(INSTALL_DATA) $(srcdir)/superwebbench.1 $(DESTDIR)$(PREFIX)/share/man/man1/superwebbench.1
+	@for doc in $(DOCS); do \
+		$(INSTALL_DATA) "$(srcdir)/$$doc" "$(DESTDIR)$(PREFIX)/share/doc/superwebbench/$$doc" || exit 1; \
+	done
+
+clean:
+	-rm -f $(OBJS) $(PROGRAM) *~ core *.core tags
+
+distclean: clean
+	-rm -f Makefile config.h config.log config.status stamp-h1
+
+# Build a self-contained source archive; regenerate configure first if needed.
+tar:
+	@test -f $(srcdir)/configure -a -f $(srcdir)/config.h.in || { \
+		echo "configure or config.h.in is missing; run autoreconf -fi first" >&2; \
+		exit 1; \
+	}
+	rm -rf .dist-tmp
+	mkdir -p .dist-tmp/$(DISTDIR)
+	@for file in $(DISTFILES); do \
+		cp -p "$(srcdir)/$$file" ".dist-tmp/$(DISTDIR)/$$file" || exit 1; \
+	done
+	tar -czf $(DISTARCHIVE) -C .dist-tmp $(DISTDIR)
+	rm -rf .dist-tmp
+
+.PHONY: all clean distclean install tar

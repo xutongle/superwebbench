@@ -1,6 +1,6 @@
 # SuperWebBench
 
-**简体中文** | [English](README_EN.md)
+**简体中文** | [English](README.md)
 
 [![GitHub stars](https://img.shields.io/github/stars/xutongle/superwebbench?style=flat-square)](https://github.com/xutongle/superwebbench/stargazers)
 [![GitHub forks](https://img.shields.io/github/forks/xutongle/superwebbench?style=flat-square)](https://github.com/xutongle/superwebbench/network/members)
@@ -33,18 +33,19 @@
 
 项目主要面向 Linux 和其他 Unix-like 系统，使用以下系统接口和工具：
 
-- C 编译器（默认使用 `gcc`）和 Make。
+- 支持 C11 `<stdatomic.h>` 的 C 编译器、POSIX Shell 和 Make。
 - POSIX Threads（pthread）。
 - POSIX/BSD Socket、`getaddrinfo`（IPv4/IPv6）和 `getopt_long`。
-- OpenSSL 1.1 或更高版本（`libssl` 和 `libcrypto`，用于 HTTPS）。
-- `sys/resource.h` 中的资源限制接口。
-- C11 `<stdatomic.h>`（用于工作线程停止标志）。
+- OpenSSL 1.1 或更高版本（`libssl` 和 `libcrypto`），并提供 TLS 客户端、SNI、主机名和 IP 校验 API。
+- `sys/resource.h` 中的资源限制接口；没有 `RLIMIT_NPROC` 的平台仅跳过该项限制调整。
 
-源码未针对 Windows 进行适配。已在 macOS（clang）验证可编译运行，其他 Unix-like 平台建议自行 `make` 验证。
+源码未针对 Windows 进行适配。CI 已覆盖 Ubuntu、macOS、CentOS Stream 9 和 Alpine；其他 Unix-like 平台通过编译期的能力探测进行适配，而不是按操作系统名称判断。
 
-Makefile 优先通过 `pkg-config` 获取 OpenSSL 编译和链接参数，未找到时默认使用 `-lssl -lcrypto`。如果 OpenSSL 安装在非标准路径，可以通过 `OPENSSL_CFLAGS` 和 `OPENSSL_LIBS` 显式指定。
+`configure` 优先通过 `pkg-config` 获取 OpenSSL 编译和链接参数，不可用时回退到 `-lssl -lcrypto`。如果 OpenSSL 安装在非标准路径，可以通过 `OPENSSL_CFLAGS` 和 `OPENSSL_LIBS` 显式指定。
 
-`ctags` 仅用于生成源码索引，不是编译和运行的必需依赖。默认 `make` 会在生成索引前检查 `ctags` 是否可用：已安装时执行 `ctags *.c`，未安装时显示跳过提示并继续，不影响二进制文件编译。
+`ctags` 仅用于生成源码索引，不是编译和运行的必需依赖。Autoconf 和 Automake 提供的 `aclocal` 仅在重新生成 `configure` 时需要；普通构建直接使用仓库和源码包中已生成的文件。
+
+CentOS 7 需要支持 C11 原子操作的新编译器和 OpenSSL 1.1 或更高版本。原生 GCC 4.8、OpenSSL 1.0.2 工具链会在配置阶段被明确拒绝，不会为了兼容而削弱证书校验。
 
 ## 编译与安装
 
@@ -53,10 +54,28 @@ Makefile 优先通过 `pkg-config` 获取 OpenSSL 编译和链接参数，未找
 在项目根目录执行：
 
 ```bash
+./configure
 make
 ```
 
-编译完成后生成 `superwebbench` 可执行文件。
+编译完成后生成 `superwebbench` 可执行文件。可以在配置阶段指定其他安装前缀：
+
+```bash
+./configure --prefix=/usr/local
+```
+
+OpenSSL 安装在非标准路径时：
+
+```bash
+./configure OPENSSL_CFLAGS="-I/opt/openssl/include" \
+  OPENSSL_LIBS="-L/opt/openssl/lib -lssl -lcrypto"
+```
+
+在 macOS 上使用 Homebrew OpenSSL 时，如有必要，可在配置前设置 `PKG_CONFIG_PATH`：
+
+```bash
+PKG_CONFIG_PATH="$(brew --prefix openssl@3)/lib/pkgconfig" ./configure
+```
 
 如果不需要生成 ctags 索引，可以只编译程序：
 
@@ -64,10 +83,26 @@ make
 make superwebbench
 ```
 
-清理编译产物：
+清理编译产物，或同时删除 `configure` 生成的配置文件：
 
 ```bash
 make clean
+make distclean
+```
+
+也支持在源码目录外构建：
+
+```bash
+mkdir build
+cd build
+../configure
+make
+```
+
+维护者修改 `configure.ac` 后，可以重新生成仓库中的构建文件，再执行配置：
+
+```bash
+autoreconf -fi
 ```
 
 ### 安装
@@ -104,15 +139,17 @@ make install DESTDIR=/tmp/superwebbench-package PREFIX=/usr
 
 ### 源码打包
 
-以下命令会先清理编译产物，再生成 `superwebbench-1.0.1.tar.gz`：
+以下命令会在不清理当前工作区的情况下生成 `superwebbench-1.0.1.tar.gz`：
 
 ```bash
 make tar
 ```
 
+源码包包含 `configure`、`config.h.in` 和 `install-sh`，接收者无需安装 Autoconf 或 Automake，直接执行 `./configure && make` 即可构建。
+
 ### 自动化构建与发布
 
-GitHub Actions 会在 Ubuntu 和 macOS 上自动编译，并执行版本与帮助命令的冒烟测试。推送任意标签时会创建 GitHub Release，上传源码包和 `superwebbench-<tag>-linux-x86_64.tar.gz` 二进制包。
+GitHub Actions 会在 Ubuntu、macOS、CentOS Stream 9 和 Alpine 上编译，执行冒烟测试并验证暂存安装。Ubuntu 还会验证维护者再生成流程、本地 HTTP 测试以及从源码包重新构建。推送任意标签时会创建 GitHub Release，上传经过重建验证的源码包和 `superwebbench-<tag>-linux-x86_64.tar.gz` 二进制包。
 
 ## 快速开始
 
@@ -350,20 +387,24 @@ make superwebbench
 ```text
 .
 ├── .github/workflows/
-│   ├── ci.yml         # Ubuntu/macOS 构建与冒烟测试
-│   └── release.yml    # 标签触发的 GitHub Release
-├── superwebbench.c    # 主程序、参数解析、HTTP 请求构造和压测逻辑
-├── socket.c           # IPv4/IPv6 TCP 连接及 OpenSSL TLS 传输
-├── socket.h           # Socket 与 TLS 连接接口声明
-├── Makefile           # 编译、安装、清理和打包规则
-├── superwebbench.1    # man 手册
-├── README             # 原始项目说明
-├── README.md          # 中文使用说明
-├── README_EN.md       # 英文使用说明
-├── Changelog          # 历史变更记录
-├── LICENSE            # GNU GPL v2 许可证全文
-├── .gitattributes     # Git 导出属性
-└── .gitignore         # Git 忽略规则
+│   ├── ci.yml         # Linux、macOS、CentOS Stream 和 Alpine 构建
+│   └── release.yml    # 标签触发的 GitHub Release 及源码包重建验证
+├── configure.ac      # Autoconf 能力探测和包版本定义
+├── configure         # 生成的配置脚本
+├── config.h.in       # 生成的配置头模板
+├── install-sh        # 可移植安装辅助脚本
+├── Makefile.in       # 编译、安装、清理和打包模板
+├── superwebbench.c   # 主程序、参数解析、HTTP 请求构造和压测逻辑
+├── socket.c          # IPv4/IPv6 TCP 连接及 OpenSSL TLS 传输
+├── socket.h          # Socket 与 TLS 连接接口声明
+├── superwebbench.1   # man 手册
+├── README            # 原始项目说明
+├── README.md         # 英文使用说明
+├── README_CN.md      # 中文使用说明
+├── Changelog         # 历史变更记录
+├── LICENSE           # GNU GPL v2 许可证全文
+├── .gitattributes    # Git 导出属性
+└── .gitignore        # Git 忽略规则
 ```
 
 ## 版权与许可证
